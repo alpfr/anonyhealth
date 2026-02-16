@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: anonyhealth
+  labels:
+    app: anonyhealth
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: anonyhealth
+  template:
+    metadata:
+      labels:
+        app: anonyhealth
+    spec:
+      containers:
+      - name: anonyhealth
+        image: gcr.io/alpfr-splunk-integration/anonyhealth:latest
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
