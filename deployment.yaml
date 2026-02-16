@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: anonyhealth
-        image: gcr.io/alpfr-splunk-integration/anonyhealth:latest
+        image: us-central1-docker.pkg.dev/alpfr-splunk-integration/healthcare-repo/anonyhealth:latest
         ports:
         - containerPort: 8080
         resources:

@@ -1,68 +1,82 @@
-# AnonyHealth
+# AnonyHealth 🛡️
 
-**Privacy-first Healthcare for the Modern Patient.**
+**Privacy-first Healthcare Triage Prototype**
 
 AnonyHealth connects patients with healthcare providers while maintaining strict privacy standards. It features an anonymous AI symptom checker, provider search, and secure patient authentication.
 
-## Features
+## ✨ Features
 
-*   **🔍 Find Provider**: Browse and search for healthcare providers (backed by Supabase).
-*   **🤖 AI Symptom Checker**: Anonymous symptom analysis powered by AI.
-*   **🔐 Authentication**: Secure Sign Up and Sign In for patients using Supabase Auth.
-*   **📱 Responsive UI**: Optimized for both mobile and desktop experiences using a custom design system.
-*   **⚡ Modern Stack**: Built with React, Vite, and Supabase.
+*   **🔍 Provider Directory**: Real-time list of healthcare providers fetched from **Supabase**.
+*   **🧠 AI Triage Chat**: Intelligent symptom analysis powered by **Anthropic Claude 3.5 Sonnet** (via Supabase Edge Functions).
+*   **🔐 Secure Authentication**:
+    *   **Supabase Auth**: Email/Password Sign Up & Sign In.
+    *   **Password Gate**: Prototype is protected by a password (`ops123`) to prevent unauthorized access.
+*   **🎨 Modern UI**:
+    *   **Sidebar Navigation**: Intuitive layout for desktop and mobile.
+    *   **Responsive Design**: Optimized for all screen sizes.
+    *   **Dark Mode**: Native support for light and dark themes.
+*   **🛡️ Security**:
+    *   `robots.txt` to block crawlers.
+    *   Environment variables for API keys.
 
-## Getting Started
+## 🚀 Tech Stack
+
+*   **Frontend**: React (Vite), JavaScript.
+*   **Backend**: Supabase (PostgreSQL, Auth, Edge Functions).
+*   **AI**: Anthropic Claude API.
+*   **Infrastructure**: Docker, Nginx, Google Kubernetes Engine (GKE).
+
+## 🛠️ Getting Started
 
 ### Prerequisites
 
 *   Node.js (v18+)
-*   NPM
-*   Supabase Account (for backend)
+*   Supabase Account
+*   Docker (for containerization)
 
 ### Installation
 
-1.  **Clone the repository** (if applicable) or navigate to the project directory.
-
-2.  **Install dependencies**:
+1.  **Install dependencies**:
     ```bash
     npm install
     ```
 
-3.  **Environment Configuration**:
-    Create a `.env` file in the root directory with your Supabase credentials:
+2.  **Environment Setup**:
+    Create `.env`:
     ```env
-    VITE_SUPABASE_URL=your_supabase_url
-    VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+    VITE_SUPABASE_URL=your_url
+    VITE_SUPABASE_ANON_KEY=your_key
     ```
 
-4.  **Database Setup**:
-    Run the SQL script `supabase_schema.sql` in your Supabase SQL Editor to create the necessary tables and seed initial data.
+3.  **Supabase Setup**:
+    *   Run `supabase_schema.sql` in Supabase SQL Editor.
+    *   Deploy Edge Function:
+        ```bash
+        supabase functions deploy aichat --no-verify-jwt
+        supabase secrets set ANTHROPIC_API_KEY=sk-...
+        ```
 
-### Running Locally
+4.  **Run Locally**:
+    ```bash
+    npm run dev
+    ```
+    Access at `http://localhost:5173`.
+    *(Password: `ops123`)*
 
-Start the development server:
+## 📦 Deployment
+
+### Docker Build
 ```bash
-npm run dev
+docker build --platform linux/amd64 -t your-repo/anonyhealth:latest .
+docker push your-repo/anonyhealth:latest
 ```
-Open [http://localhost:5173](http://localhost:5173) to view it in the browser.
 
-### Building for Production
-
-Compile the application for deployment:
+### Kubernetes (GKE)
 ```bash
-npm run build
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
 ```
-The optimized files will be generated in the `dist/` directory.
 
-## Deployment
+## 📄 License
 
-The `dist/` folder can be deployed to any static hosting provider such as:
-*   Vercel
-*   Netlify
-*   GitHub Pages
-*   Google Cloud Storage / Firebase Hosting
-
-## License
-
-Private / Proprietary.
+Proprietary Prototype.

@@ -609,55 +609,55 @@ const CHAT_MSGS = [
   { role: "bot", text: "Thank you — let me help. Based on your description, you may require medical attention. Would you like to book an appointment with a matching provider?" },
 ];
 
-const AIChatMobile = ({ theme, onBack, initialMsg, onBook }) => {
+const AIChatMobile = ({ theme, initialMsg, onBack, onBook }) => {
   const t = T[theme];
-  const isDark = theme === "dark";
-  const [msgs, setMsgs] = useState([]);
+  const [msgs, setMsgs] = useState(initialMsg ? [{ role: "user", text: initialMsg }] : []);
+  const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const chatRef = useRef(null);
+  const isDark = theme === "dark";
 
   useEffect(() => {
-    let isMounted = true;
-    let timeoutId;
-
-    const loadChat = async () => {
-      if (initialMsg) {
-        setMsgs([{ role: "user", text: initialMsg }]);
-        setTyping(true);
-        await new Promise(r => { timeoutId = setTimeout(r, 1000 + Math.random() * 500); });
-        if (!isMounted) return;
-        setTyping(false);
-        // Add bot response
-        setMsgs(prev => [...prev, CHAT_MSGS[2]]);
-      } else {
-        // Default flow
-        let i = 0;
-        const addNext = async () => {
-          if (!isMounted || i >= CHAT_MSGS.length) return;
-          if (CHAT_MSGS[i].role === "bot") {
-            setTyping(true);
-            await new Promise(r => { timeoutId = setTimeout(r, 800 + Math.random() * 500); });
-            if (!isMounted) return;
-            setTyping(false);
-          }
-          setMsgs(prev => [...prev, CHAT_MSGS[i]]);
-          i++;
-          timeoutId = setTimeout(addNext, 600);
-        };
-        addNext();
-      }
-    };
-
-    loadChat();
-    return () => {
-      isMounted = false;
-      clearTimeout(timeoutId);
-    };
+    if (initialMsg && msgs.length === 1 && msgs[0].role === "user") {
+      // Automatically send initial message
+      handleSend(initialMsg, true);
+    }
   }, [initialMsg]);
 
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
   }, [msgs, typing]);
+
+  const handleSend = async (textOverride = null, skipUserAdd = false) => {
+    const textToSend = textOverride || input;
+    if (!textToSend.trim()) return;
+
+    if (!skipUserAdd) {
+      setMsgs(prev => [...prev, { role: "user", text: textToSend.trim() }]);
+      setInput("");
+    }
+
+    setTyping(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('aichat', {
+        body: { message: textToSend },
+      });
+
+      if (error) throw error;
+      if (data && data.reply) {
+        setMsgs(prev => [...prev, { role: "bot", text: data.reply }]);
+      } else {
+        throw new Error("No reply in data");
+      }
+    } catch (err) {
+      console.error("AI Error:", err);
+      // Fallback message if AI fails (or no API key set)
+      setMsgs(prev => [...prev, { role: "bot", text: "I'm having trouble connecting to the AI service. Please try again in a moment." }]);
+    } finally {
+      setTyping(false);
+    }
+  };
 
   return (
     <>
@@ -682,6 +682,12 @@ const AIChatMobile = ({ theme, onBack, initialMsg, onBook }) => {
           <div style={{ fontSize: 14, fontWeight: 700, color: t.text, fontFamily: "'Outfit', sans-serif" }}>AI Triage Assistant</div>
           <div style={{ fontSize: 11.5, color: t.textMut, fontFamily: "'Outfit', sans-serif", marginTop: 2 }}>Anonymous session • No data stored</div>
         </div>
+
+        {msgs.length === 0 && (
+          <div style={{ textAlign: "center", padding: 40, color: t.textMut, fontSize: 14, fontFamily: "'Outfit', sans-serif" }}>
+            How can I help you today?
+          </div>
+        )}
 
         {msgs.map((msg, i) => (
           <div key={i} style={{
@@ -738,13 +744,21 @@ const AIChatMobile = ({ theme, onBack, initialMsg, onBook }) => {
           display: "flex", alignItems: "center", gap: 8, padding: "8px 12px",
           borderRadius: 12, background: t.bgInput, border: `1px solid ${t.border}`,
         }}>
-          <input placeholder="Type your symptoms..." style={{
-            flex: 1, border: "none", background: "transparent", outline: "none",
-            fontSize: 14, color: t.text, fontFamily: "'Outfit', sans-serif",
-          }} />
-          <button style={{
+          <input
+            placeholder="Type your symptoms..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSend()}
+            style={{
+              flex: 1, border: "none", background: "transparent", outline: "none",
+              fontSize: 14, color: t.text, fontFamily: "'Outfit', sans-serif",
+            }}
+          />
+          <button onClick={() => handleSend()} disabled={!input.trim() || typing} style={{
             width: 34, height: 34, borderRadius: 10, border: "none", cursor: "pointer",
-            background: t.gradient, display: "flex", alignItems: "center", justifyContent: "center",
+            background: input.trim() ? t.gradient : t.textMut,
+            opacity: input.trim() ? 1 : 0.5,
+            display: "flex", alignItems: "center", justifyContent: "center",
           }}>
             {Icons.send("#fff", 14)}
           </button>
@@ -1080,7 +1094,181 @@ const FindProviderMobile = ({ theme, onSelectProvider, providers = PROVIDERS }) 
 // ═══════════════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════════════
+// SCREEN: ABOUT & NAVIGATION (MOBILE)
+// ═══════════════════════════════════════════════════════════
+const AboutMobile = ({ theme, onBack }) => {
+  const t = T[theme];
+  const isDark = theme === "dark";
+
+  const AboutCard = ({ icon, title, desc, color }) => (
+    <div style={{
+      background: t.bgCard, borderRadius: 16, padding: 16,
+      border: `1px solid ${t.border}`, marginBottom: 16,
+      boxShadow: t.shadow,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+        <div style={{
+          width: 36, height: 36, borderRadius: 10, background: `${color}15`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          {icon}
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: t.text, fontFamily: "'Outfit', sans-serif" }}>
+          {title}
+        </div>
+      </div>
+      <div style={{ fontSize: 13.5, lineHeight: 1.5, color: t.textSec, fontFamily: "'Outfit', sans-serif" }}>
+        {desc}
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: t.bg, animation: "fadeUp 0.3s ease-out" }}>
+      <MobileNav theme={theme} onBack={onBack} title="About AnonyHealth" rightAction={null} />
+
+      <div style={{ flex: 1, overflowY: "auto", padding: 20, paddingBottom: 40 }}>
+        {/* Hero */}
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div style={{
+            width: 64, height: 64, borderRadius: 20, background: t.gradient, margin: "0 auto 16px",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: isDark ? `0 0 30px ${t.accent}40` : `0 8px 24px ${t.accent}25`,
+          }}>
+            {Icons.shield("#fff", 32)}
+          </div>
+          <h2 style={{ fontSize: 22, fontWeight: 800, color: t.text, fontFamily: "'Outfit', sans-serif", letterSpacing: "-0.02em" }}>
+            AnonyHealth <span style={{ color: t.accent }}>Proto</span>
+          </h2>
+          <p style={{ fontSize: 14, color: t.textMut, marginTop: 6, fontFamily: "'Outfit', sans-serif" }}>
+            Privacy-first AI Triage & Provider Match.
+          </p>
+        </div>
+
+        <AboutCard
+          icon={Icons.bot(t.accent)}
+          color={t.accent}
+          title="AI Triage Chat"
+          desc="Describe your symptoms to our AI assistant powered by Anthropic Claude 3.5. It provides immediate, clinically-relevant guidance and suggests matching specialists."
+        />
+
+        <AboutCard
+          icon={Icons.search(t.success)}
+          color={t.success}
+          title="Find Providers"
+          desc="Browse our directory of verified healthcare professionals. Filter by specialty and location. Data is securely fetched from our database."
+        />
+
+        <AboutCard
+          icon={Icons.lock(t.error)}
+          color={t.error}
+          title="Private & Secure"
+          desc="Your session is anonymous by default. When you choose to sign up, your data is encrypted. We prioritize your privacy above all."
+        />
+
+        <div style={{ marginTop: 32, padding: 20, background: t.bgNav, borderRadius: 16, border: `1px solid ${t.border}`, textAlign: "center" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: t.text, marginBottom: 4, fontFamily: "'Outfit', sans-serif" }}>
+            How to Navigate
+          </div>
+          <div style={{ fontSize: 12.5, color: t.textSec, lineHeight: 1.5, fontFamily: "'Outfit', sans-serif" }}>
+            Use the <strong>Sidebar (Left)</strong> to switch between Dashboard, Chat, and Settings.
+            <br /><br />
+            On Mobile, these options are available via the bottom/side menu depending on your screen size.
+          </div>
+        </div>
+
+        <div style={{ textAlign: "center", marginTop: 32, opacity: 0.5 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: t.textMut, fontFamily: "'Outfit', sans-serif" }}>
+            VERSION 1.0.0 (BETA)
+          </div>
+          <div style={{ fontSize: 10, color: t.textMut, marginTop: 4, fontFamily: "'Outfit', sans-serif" }}>
+            © 2026 OpsSightAI
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════
+// MAIN APP
+// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// PASSWORD GATEKEEPER
+// ═══════════════════════════════════════════════════════════
+const PasswordGate = ({ children }) => {
+  const [auth, setAuth] = useState(false);
+  const [pass, setPass] = useState("");
+  const [err, setErr] = useState(false);
+
+  useEffect(() => {
+    if (localStorage.getItem("anony_site_auth") === "true") setAuth(true);
+  }, []);
+
+  const check = () => {
+    if (pass === "ops123") {
+      setAuth(true);
+      localStorage.setItem("anony_site_auth", "true");
+    } else {
+      setErr(true);
+      setTimeout(() => setErr(false), 2000);
+    }
+  };
+
+  if (auth) return children;
+
+  return (
+    <div style={{
+      height: "100vh", background: "#f8fafc", fontFamily: "'Outfit', sans-serif",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 20
+    }}>
+      <div style={{
+        width: "100%", maxWidth: 360, background: "#fff", padding: 32, borderRadius: 24,
+        boxShadow: "0 20px 40px -10px rgba(0,0,0,0.1)", textAlign: "center"
+      }}>
+        <div style={{
+          width: 56, height: 56, borderRadius: 16, background: "linear-gradient(135deg, #38bdf8, #818cf8)",
+          margin: "0 auto 20px", display: "flex", alignItems: "center", justifyContent: "center",
+          boxShadow: "0 8px 20px rgba(56,189,248,0.25)"
+        }}>
+          {Icons.lock("#fff", 24)}
+        </div>
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: "#0f172a", marginBottom: 8 }}>Prototype Access</h2>
+        <p style={{ fontSize: 13, color: "#64748b", marginBottom: 24 }}>Enter the password to view this prototype.</p>
+
+        <input
+          type="password"
+          placeholder="Password"
+          value={pass}
+          onChange={e => setPass(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && check()}
+          style={{
+            width: "100%", padding: "14px 16px", borderRadius: 12, border: `1px solid ${err ? "#ef4444" : "#e2e8f0"}`,
+            background: "#f1f5f9", fontSize: 14, marginBottom: 12, outline: "none",
+            transition: "all 0.2s"
+          }}
+        />
+        <button onClick={check} style={{
+          width: "100%", padding: "14px", borderRadius: 12, border: "none", cursor: "pointer",
+          background: "#0f172a", color: "#fff", fontSize: 14, fontWeight: 600,
+          opacity: pass ? 1 : 0.7
+        }}>
+          Enter Prototype
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export default function AnonyHealthApp() {
+  return (
+    <PasswordGate>
+      <AnonyHealthAppContent />
+    </PasswordGate>
+  );
+}
+
+function AnonyHealthAppContent() {
   const [theme, setTheme] = useState("light");
   const [desktopScreen, setDesktopScreen] = useState("providers");
   const [mobileScreen, setMobileScreen] = useState("dashboard");
@@ -1139,6 +1327,7 @@ export default function AnonyHealthApp() {
       case "chat": return <AIChatMobile theme={theme} initialMsg={chatInitialMsg} onBack={() => setMobileScreen("dashboard")} onBook={() => setMobileScreen("findProvider")} />;
       case "register": return <RegisterMobile theme={theme} onBack={() => setMobileScreen("dashboard")} />;
       case "settings": return <SettingsMobile theme={theme} session={session} onNavigate={(s) => setMobileScreen(s)} onBack={() => setMobileScreen("dashboard")} />;
+      case "about": return <AboutMobile theme={theme} onBack={() => setMobileScreen("dashboard")} />;
       default: return <PatientDashboard theme={theme} onNavigate={(s) => setMobileScreen(s)} />;
     }
   };
@@ -1191,12 +1380,13 @@ export default function AnonyHealthApp() {
       {/* Top Bar - Hide on mobile */}
       {!isMobile && (
         <div style={{
-          position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+          position: "fixed", top: 0, left: 0, bottom: 0, width: 220, zIndex: 100,
           background: t.bgNav, backdropFilter: "blur(20px) saturate(180%)",
-          borderBottom: `1px solid ${t.border}`,
-          height: 64, padding: "0 28px", display: "flex", alignItems: "center", justifyContent: "space-between",
+          borderRight: `1px solid ${t.border}`,
+          padding: "24px 20px", display: "flex", flexDirection: "column", gap: 32,
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {/* Logo */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, paddingLeft: 4 }}>
             <div style={{
               width: 34, height: 34, borderRadius: 10, background: t.gradient,
               display: "flex", alignItems: "center", justifyContent: "center",
@@ -1204,59 +1394,75 @@ export default function AnonyHealthApp() {
             }}>
               {Icons.shield("#fff", 17)}
             </div>
-            <span style={{ fontSize: 17, fontWeight: 700, color: t.text, letterSpacing: "-0.02em" }}>
-              <span style={{ color: t.accent }}>Anony</span>Health
-            </span>
-            <span style={{
-              marginLeft: 8, padding: "3px 10px", borderRadius: 6,
-              background: t.accentLight, fontSize: 11, fontWeight: 600, color: t.accent,
-              border: `1px solid ${t.accent}15`,
-            }}>
-              PROTOTYPE
-            </span>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <span style={{ fontSize: 17, fontWeight: 700, color: t.text, letterSpacing: "-0.02em", lineHeight: 1 }}>
+                <span style={{ color: t.accent }}>Anony</span>Health
+              </span>
+              <span style={{
+                fontSize: 10, fontWeight: 600, color: t.accent, opacity: 0.8, letterSpacing: "0.05em", marginTop: 2
+              }}>
+                PROTOTYPE
+              </span>
+            </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            {/* View Mode */}
-            {["split", "desktop", "mobile"].map(mode => (
-              <button key={mode} onClick={() => setViewMode(mode)} style={{
-                padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer",
-                fontSize: 12.5, fontWeight: 500, fontFamily: "'Outfit', sans-serif",
-                background: viewMode === mode ? t.accentLight : "transparent",
-                color: viewMode === mode ? t.accent : t.textSec,
-              }}>
-                {mode === "split" ? "Split View" : mode === "desktop" ? "Desktop" : "Mobile"}
-              </button>
-            ))}
+          {/* Navigation */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 24, flex: 1 }}>
 
-            <div style={{ width: 1, height: 22, background: t.border, margin: "0 8px" }} />
+            {/* View Modes */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: t.textMut, textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 8 }}>
+                View Mode
+              </div>
+              {["split", "desktop", "mobile"].map(mode => (
+                <button key={mode} onClick={() => setViewMode(mode)} style={{
+                  padding: "10px 14px", borderRadius: 10, border: "none", cursor: "pointer",
+                  fontSize: 13, fontWeight: 500, fontFamily: "'Outfit', sans-serif",
+                  background: viewMode === mode ? t.accentLight : "transparent",
+                  color: viewMode === mode ? t.accent : t.textSec,
+                  display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+                  transition: "all 0.2s ease"
+                }}>
+                  {viewMode === mode && <div style={{ width: 4, height: 4, borderRadius: 2, background: t.accent }} />}
+                  {mode === "split" ? "Split View" : mode === "desktop" ? "Desktop Only" : "Mobile Only"}
+                </button>
+              ))}
+            </div>
 
-            {/* Mobile nav */}
-            {["dashboard", "findProvider", "chat", "register", "settings"].map(s => (
-              <button key={s} onClick={() => setMobileScreen(s)} style={{
-                padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer",
-                fontSize: 11.5, fontWeight: 500, fontFamily: "'Outfit', sans-serif",
-                background: mobileScreen === s ? t.chipBg : "transparent",
-                color: mobileScreen === s ? t.text : t.textMut,
-              }}>
-                {s === "dashboard" ? "Dash" : s === "findProvider" ? "Find" : s === "chat" ? "Chat" : s === "register" ? "Register" : "Settings"}
-              </button>
-            ))}
-
-            <div style={{ width: 1, height: 22, background: t.border, margin: "0 8px" }} />
-
-            <button onClick={() => setTheme(isDark ? "light" : "dark")} style={{
-              width: 34, height: 34, borderRadius: 8, border: `1px solid ${t.border}`,
-              background: t.bgCard, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              {isDark ? Icons.sun(t.textSec) : Icons.moon(t.textSec)}
-            </button>
+            {/* Mobile Screens */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: t.textMut, textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 8 }}>
+                Mobile Screens
+              </div>
+              {["dashboard", "findProvider", "chat", "register", "settings", "about"].map(s => (
+                <button key={s} onClick={() => setMobileScreen(s)} style={{
+                  padding: "10px 14px", borderRadius: 10, border: "none", cursor: "pointer",
+                  fontSize: 13, fontWeight: 500, fontFamily: "'Outfit', sans-serif",
+                  background: mobileScreen === s ? t.chipBg : "transparent",
+                  color: mobileScreen === s ? t.text : t.textMut,
+                  display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+                  transition: "all 0.2s ease"
+                }}>
+                  {s === "dashboard" ? "Dashboard" : s === "findProvider" ? "Find Provider" : s === "chat" ? "AI Chat" : s === "register" ? "Register" : s === "settings" ? "Settings" : "About / Help"}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {/* Theme Toggle */}
+          <button onClick={() => setTheme(isDark ? "light" : "dark")} style={{
+            width: "100%", padding: "12px", borderRadius: 12, border: `1px solid ${t.border}`,
+            background: t.bgCard, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+            color: t.text, fontSize: 13, fontWeight: 600, fontFamily: "'Outfit', sans-serif"
+          }}>
+            {isDark ? Icons.sun(t.textSec) : Icons.moon(t.textSec)}
+            {isDark ? "Light Mode" : "Dark Mode"}
+          </button>
         </div>
       )}
 
       {/* Content */}
-      <div style={{ paddingTop: isMobile ? 0 : 64, position: "relative", zIndex: 1, minHeight: "100vh" }}>
+      <div style={{ paddingTop: isMobile ? 0 : 24, paddingLeft: isMobile ? 0 : 220, position: "relative", zIndex: 1, minHeight: "100vh" }}>
         {viewMode === "split" && (
           <div style={{
             display: "flex", gap: 40, padding: "48px 40px", alignItems: "flex-start",
