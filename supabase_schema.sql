@@ -65,9 +65,25 @@ values
     ARRAY['Family Medicine', 'Wellness', 'Preventive Care', 'Geriatrics']
   );
 
+-- 2. Patient Profiles (PII stored separately from auth metadata)
+create table patient_profiles (
+  id uuid references auth.users primary key,
+  full_name text not null,
+  dob date not null,
+  address text not null,
+  consented_at timestamp with time zone not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table patient_profiles enable row level security;
+create policy "Users can view own profile" on patient_profiles for select using (auth.uid() = id);
+create policy "Users can insert own profile" on patient_profiles for insert with check (auth.uid() = id);
+create policy "Users can update own profile" on patient_profiles for update using (auth.uid() = id);
+
 -- 3. Health Logs (History)
 create table health_logs (
-  id uuid default uuid_generate_v4() primary key,
+  id uuid default gen_random_uuid() primary key,
   user_id uuid references auth.users not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   symptom text,
@@ -79,6 +95,19 @@ create table health_logs (
 alter table health_logs enable row level security;
 create policy "Users can view own logs" on health_logs for select using (auth.uid() = user_id);
 create policy "Users can insert own logs" on health_logs for insert with check (auth.uid() = user_id);
+
+-- 4. Audit Logs (SOC 2 compliance)
+create table audit_logs (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users,
+  event_type text not null,
+  detail text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table audit_logs enable row level security;
+create policy "Users can view own audit logs" on audit_logs for select using (auth.uid() = user_id);
+create policy "Authenticated users can insert audit logs" on audit_logs for insert with check (auth.uid() = user_id);
 
 -- Enable Row Level Security (optional, for read access)
 alter table providers enable row level security;

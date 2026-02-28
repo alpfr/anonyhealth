@@ -2,6 +2,24 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "./supabaseClient";
 
 // ═══════════════════════════════════════════════════════════
+// AUDIT LOGGING (SOC 2)
+// ═══════════════════════════════════════════════════════════
+const logAuditEvent = async (eventType, detail = null) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      await supabase.from('audit_logs').insert({
+        user_id: session.user.id,
+        event_type: eventType,
+        detail: detail,
+      });
+    }
+  } catch (err) {
+    console.error("Audit log error:", err);
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
 // THEME SYSTEM
 // ═══════════════════════════════════════════════════════════
 const T = {
@@ -635,11 +653,16 @@ const AIChatMobile = ({ theme, initialMsg, onBack, onBook }) => {
   }, [msgs, typing]);
 
   const handleSend = async (textOverride = null, skipUserAdd = false) => {
-    const textToSend = textOverride || input;
-    if (!textToSend.trim()) return;
+    const textToSend = (textOverride || input).trim();
+    if (!textToSend) return;
+
+    if (textToSend.length > 2000) {
+      setMsgs(prev => [...prev, { role: "bot", text: "Please keep your message under 2000 characters." }]);
+      return;
+    }
 
     if (!skipUserAdd) {
-      setMsgs(prev => [...prev, { role: "user", text: textToSend.trim() }]);
+      setMsgs(prev => [...prev, { role: "user", text: textToSend }]);
       setInput("");
     }
 
@@ -804,45 +827,70 @@ const RegisterMobile = ({ theme, onBack }) => {
   const [isLogin, setIsLogin] = useState(false);
   const [msg, setMsg] = useState("");
 
+  const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const validateDob = (dob) => /^(0[1-9]|1[0-2])\/(0[1-9]|[12]\d|3[01])\/\d{4}$/.test(dob);
+  const validatePassword = (pw) => pw.length >= 8 && /[A-Z]/.test(pw) && /[a-z]/.test(pw) && /\d/.test(pw);
+
   const handleAuth = async () => {
     if (!email || !password) {
       setMsg("Please enter both email and password.");
+      return;
+    }
+    if (!validateEmail(email)) {
+      setMsg("Please enter a valid email address.");
+      return;
+    }
+    if (!isLogin && !validatePassword(password)) {
+      setMsg("Password must be at least 8 characters with uppercase, lowercase, and a number.");
       return;
     }
     if (!isLogin && (!name || !dob || !address)) {
       setMsg("Please complete all fields for identity verification.");
       return;
     }
+    if (!isLogin && !validateDob(dob)) {
+      setMsg("Please enter date of birth in MM/DD/YYYY format.");
+      return;
+    }
 
     setLoading(true);
     setMsg("");
 
-    // Maryland Compliance: Store identity in metadata
     const { data, error } = isLogin
       ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: name,
-            dob: dob,
-            address: address,
-            consented_at: new Date().toISOString()
-          }
-        }
-      });
+      : await supabase.auth.signUp({ email, password });
 
     if (error) {
       setMsg(error.message);
-    } else {
-      if (isLogin && data?.user) {
-        setMsg("Welcome back!");
-        setTimeout(() => onBack(), 800);
-      } else {
-        setMsg("Success! Please check your email to confirm.");
-      }
+      setLoading(false);
+      return;
     }
+
+    // On sign-up, store PII in separate RLS-protected table (not auth metadata)
+    if (!isLogin && data?.user) {
+      const { error: profileError } = await supabase.from('patient_profiles').insert({
+        id: data.user.id,
+        full_name: name.trim(),
+        dob: dob,
+        address: address.trim(),
+        consented_at: new Date().toISOString(),
+      });
+
+      if (profileError) {
+        console.error("Profile creation error:", profileError);
+        setMsg("Account created but profile save failed. Please contact support.");
+        setLoading(false);
+        return;
+      }
+
+      logAuditEvent("auth.sign_up", "New patient registered with consent");
+      setMsg("Success! Please check your email to confirm.");
+    } else if (isLogin && data?.user) {
+      logAuditEvent("auth.sign_in", "User signed in via registration page");
+      setMsg("Welcome back!");
+      setTimeout(() => onBack(), 800);
+    }
+
     setLoading(false);
   };
 
@@ -1056,6 +1104,7 @@ const SettingsMobile = ({ theme, onBack, session, onNavigate }) => {
   );
 
   const handleSignOut = async () => {
+    await logAuditEvent("auth.sign_out", "User signed out");
     await supabase.auth.signOut();
     onBack();
   };
@@ -1394,28 +1443,49 @@ const AboutMobile = ({ theme, onBack }) => {
 // MAIN APP
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
-// PASSWORD GATEKEEPER
+// AUTH GATE — Requires Supabase authentication
 // ═══════════════════════════════════════════════════════════
-const PasswordGate = ({ children }) => {
-  const [auth, setAuth] = useState(false);
-  const [pass, setPass] = useState("");
-  const [err, setErr] = useState(false);
+const AuthGate = ({ children }) => {
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (localStorage.getItem("anony_site_auth") === "true") setAuth(true);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
-  const check = () => {
-    if (pass === "ops123") {
-      setAuth(true);
-      localStorage.setItem("anony_site_auth", "true");
-    } else {
-      setErr(true);
-      setTimeout(() => setErr(false), 2000);
+  const handleLogin = async () => {
+    if (!email || !password) { setError("Please enter email and password."); return; }
+    setSubmitting(true);
+    setError("");
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      setError(error.message);
+    } else if (data?.user) {
+      logAuditEvent("auth.sign_in", "User signed in via AuthGate");
     }
+    setSubmitting(false);
   };
 
-  if (auth) return children;
+  if (loading) {
+    return (
+      <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f8fafc", fontFamily: "'Outfit', sans-serif" }}>
+        <div style={{ fontSize: 14, color: "#64748b" }}>Loading...</div>
+      </div>
+    );
+  }
+
+  if (session) return children;
 
   return (
     <div style={{
@@ -1431,29 +1501,43 @@ const PasswordGate = ({ children }) => {
           margin: "0 auto 20px", display: "flex", alignItems: "center", justifyContent: "center",
           boxShadow: "0 8px 20px rgba(56,189,248,0.25)"
         }}>
-          {Icons.lock("#fff", 24)}
+          {Icons.shield("#fff", 24)}
         </div>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: "#0f172a", marginBottom: 8 }}>Prototype Access</h2>
-        <p style={{ fontSize: 13, color: "#64748b", marginBottom: 24 }}>Enter the password to view this prototype.</p>
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: "#0f172a", marginBottom: 8 }}>AnonyHealth</h2>
+        <p style={{ fontSize: 13, color: "#64748b", marginBottom: 24 }}>Sign in to access the platform.</p>
 
+        <input
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && handleLogin()}
+          style={{
+            width: "100%", padding: "14px 16px", borderRadius: 12, border: "1px solid #e2e8f0",
+            background: "#f1f5f9", fontSize: 14, marginBottom: 12, outline: "none",
+          }}
+        />
         <input
           type="password"
           placeholder="Password"
-          value={pass}
-          onChange={e => setPass(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && check()}
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && handleLogin()}
           style={{
-            width: "100%", padding: "14px 16px", borderRadius: 12, border: `1px solid ${err ? "#ef4444" : "#e2e8f0"}`,
+            width: "100%", padding: "14px 16px", borderRadius: 12, border: `1px solid ${error ? "#ef4444" : "#e2e8f0"}`,
             background: "#f1f5f9", fontSize: 14, marginBottom: 12, outline: "none",
             transition: "all 0.2s"
           }}
         />
-        <button onClick={check} style={{
-          width: "100%", padding: "14px", borderRadius: 12, border: "none", cursor: "pointer",
+        {error && (
+          <div style={{ fontSize: 13, color: "#ef4444", marginBottom: 12 }}>{error}</div>
+        )}
+        <button onClick={handleLogin} disabled={submitting} style={{
+          width: "100%", padding: "14px", borderRadius: 12, border: "none", cursor: submitting ? "wait" : "pointer",
           background: "#0f172a", color: "#fff", fontSize: 14, fontWeight: 600,
-          opacity: pass ? 1 : 0.7
+          opacity: submitting ? 0.7 : 1
         }}>
-          Enter Prototype
+          {submitting ? "Signing in..." : "Sign In"}
         </button>
       </div>
     </div>
@@ -1462,9 +1546,9 @@ const PasswordGate = ({ children }) => {
 
 export default function AnonyHealthApp() {
   return (
-    <PasswordGate>
+    <AuthGate>
       <AnonyHealthAppContent />
-    </PasswordGate>
+    </AuthGate>
   );
 }
 

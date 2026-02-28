@@ -3,9 +3,34 @@ kind: Service
 metadata:
   name: anonyhealth
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   ports:
   - port: 80
     targetPort: 8080
   selector:
     app: anonyhealth
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: anonyhealth-ingress
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: anonyhealth-ip
+    networking.gke.io/managed-certificates: anonyhealth-cert
+    kubernetes.io/ingress.class: gce
+    networking.gke.io/v1beta1.FrontendConfig: anonyhealth-frontend
+spec:
+  defaultBackend:
+    service:
+      name: anonyhealth
+      port:
+        number: 80
+---
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: anonyhealth-frontend
+spec:
+  redirectToHttps:
+    enabled: true
+    responseCodeName: MOVED_PERMANENTLY_DEFAULT
