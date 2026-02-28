@@ -275,7 +275,7 @@ const ProviderCard = ({ prov, theme, onSelect, compact }) => {
           }}>
             {Icons.shield(t.accent, 14)}
             <span style={{ fontSize: 11, fontWeight: 600, color: t.accent, fontFamily: "'Outfit', sans-serif", lineHeight: 1.2 }}>
-              Anonymous Pre-<br />Intake Available
+              Confidential Pre-<br />Intake Available
             </span>
           </div>
           <button style={{
@@ -284,7 +284,7 @@ const ProviderCard = ({ prov, theme, onSelect, compact }) => {
             fontFamily: "'Outfit', sans-serif",
             boxShadow: isDark ? `0 0 16px ${t.accent}25` : `0 2px 10px ${t.accent}20`,
           }}>
-            Start Anonymously
+            Start Confidentially
           </button>
         </div>
       </div>
@@ -465,7 +465,7 @@ const ProviderDetailsMobile = ({ theme, provider, onBack, onStartAnon, providers
           boxShadow: isDark ? `0 0 24px ${t.accent}30` : `0 4px 16px ${t.accent}20`,
           display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
         }}>
-          {Icons.shield("#fff", 18)} Start Anonymous Intake
+          {Icons.shield("#fff", 18)} Start Verified Intake
         </button>
       </div>
     </>
@@ -501,7 +501,7 @@ const PatientDashboard = ({ theme, onNavigate }) => {
         {/* Anonymous Activity */}
         <div style={{ marginBottom: 24 }}>
           <h2 style={{ fontSize: 15, fontWeight: 700, color: t.text, fontFamily: "'Outfit', sans-serif", margin: "0 0 12px" }}>
-            Anonymous Activity
+            Confidential Activity
           </h2>
           <div style={{
             display: "flex", alignItems: "center", gap: 10, padding: "12px 16px",
@@ -519,6 +519,11 @@ const PatientDashboard = ({ theme, onNavigate }) => {
                 fontSize: 14, color: t.text, fontFamily: "'Outfit', sans-serif",
               }}
             />
+            <button onClick={() => onNavigate("history")} style={{
+              border: "none", background: "none", cursor: "pointer", color: t.accent, fontSize: 12, fontWeight: 600
+            }}>
+              HISTORY
+            </button>
           </div>
         </div>
 
@@ -645,8 +650,23 @@ const AIChatMobile = ({ theme, initialMsg, onBack, onBook }) => {
       });
 
       if (error) throw error;
-      if (data && data.reply) {
-        setMsgs(prev => [...prev, { role: "bot", text: data.reply }]);
+
+      const aiResponse = data;
+      if (aiResponse && aiResponse.reply) {
+        setMsgs(prev => [...prev, { role: "bot", text: aiResponse.reply }]);
+
+        // Log to history if severity is present
+        if (aiResponse.severity) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            await supabase.from('health_logs').insert({
+              user_id: session.user.id,
+              symptom: aiResponse.symptom || "Triage Session",
+              severity: aiResponse.severity,
+              ai_advice: aiResponse.reply
+            });
+          }
+        }
       } else {
         throw new Error("No reply in data");
       }
@@ -680,7 +700,7 @@ const AIChatMobile = ({ theme, initialMsg, onBack, onBook }) => {
             {Icons.bot("#fff")}
           </div>
           <div style={{ fontSize: 14, fontWeight: 700, color: t.text, fontFamily: "'Outfit', sans-serif" }}>AI Triage Assistant</div>
-          <div style={{ fontSize: 11.5, color: t.textMut, fontFamily: "'Outfit', sans-serif", marginTop: 2 }}>Anonymous session • No data stored</div>
+          <div style={{ fontSize: 11.5, color: t.textMut, fontFamily: "'Outfit', sans-serif", marginTop: 2 }}>Confidential session • No insurance shared</div>
         </div>
 
         {msgs.length === 0 && (
@@ -776,6 +796,9 @@ const RegisterMobile = ({ theme, onBack }) => {
   const isDark = theme === "dark";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [dob, setDob] = useState("");
+  const [address, setAddress] = useState("");
   const [loading, setLoading] = useState(false);
   const [isLogin, setIsLogin] = useState(false);
   const [msg, setMsg] = useState("");
@@ -785,11 +808,29 @@ const RegisterMobile = ({ theme, onBack }) => {
       setMsg("Please enter both email and password.");
       return;
     }
+    if (!isLogin && (!name || !dob || !address)) {
+      setMsg("Please complete all fields for identity verification.");
+      return;
+    }
+
     setLoading(true);
     setMsg("");
+
+    // Maryland Compliance: Store identity in metadata
     const { data, error } = isLogin
       ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password });
+      : await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: name,
+            dob: dob,
+            address: address,
+            consented_at: new Date().toISOString()
+          }
+        }
+      });
 
     if (error) {
       setMsg(error.message);
@@ -812,13 +853,48 @@ const RegisterMobile = ({ theme, onBack }) => {
           fontFamily: "'Instrument Serif', Georgia, serif", fontSize: 30,
           fontWeight: 400, color: t.text, margin: "0 0 8px", letterSpacing: "-0.02em",
         }}>
-          {isLogin ? "Welcome back" : "Create Account"}
+          {isLogin ? "Welcome back" : "Confidential Registration"}
         </h1>
-        <p style={{ fontSize: 14, color: t.textSec, fontFamily: "'Outfit', sans-serif", margin: "0 0 28px", lineHeight: 1.5 }}>
-          {isLogin ? "Sign in to access your dashboard." : "Sign up to track your appointments and health."}
+        <p style={{ fontSize: 13.5, color: t.textSec, fontFamily: "'Outfit', sans-serif", margin: "0 0 24px", lineHeight: 1.5 }}>
+          {isLogin ? "Sign in to access your dashboard." : "Maryland law requires identity verification for telehealth. We strictly protect this data and do not bill insurance."}
         </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 24 }}>
+          {!isLogin && (
+            <>
+              <input
+                placeholder="Legal Name (for verification)"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                style={{
+                  padding: "14px", borderRadius: 12, border: `1px solid ${t.border}`,
+                  background: t.bgInput, color: t.text, fontSize: 15, fontFamily: "'Outfit', sans-serif", outline: "none",
+                }}
+              />
+              <input
+                placeholder="Date of Birth (MM/DD/YYYY)"
+                value={dob}
+                onChange={(e) => setDob(e.target.value)}
+                style={{
+                  padding: "14px", borderRadius: 12, border: `1px solid ${t.border}`,
+                  background: t.bgInput, color: t.text, fontSize: 15, fontFamily: "'Outfit', sans-serif", outline: "none",
+                }}
+              />
+              <input
+                placeholder="Home Address"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                style={{
+                  padding: "14px", borderRadius: 12, border: `1px solid ${t.border}`,
+                  background: t.bgInput, color: t.text, fontSize: 15, fontFamily: "'Outfit', sans-serif", outline: "none",
+                }}
+              />
+              <div style={{ fontSize: 12, color: t.textMut, fontFamily: "'Outfit', sans-serif", padding: "0 4px" }}>
+                * By registering, I consent to telehealth services and affirm my identity is accurate.
+              </div>
+            </>
+          )}
+
           <input
             placeholder="Email address"
             value={email}
@@ -859,7 +935,7 @@ const RegisterMobile = ({ theme, onBack }) => {
           fontFamily: "'Outfit', sans-serif", marginBottom: 16, opacity: loading ? 0.7 : 1,
           boxShadow: isDark ? `0 0 20px ${t.accent}25` : `0 4px 16px ${t.accent}15`,
         }}>
-          {loading ? "Processing..." : (isLogin ? "Sign In" : "Sign Up")}
+          {loading ? "Processing..." : (isLogin ? "Sign In" : "Register & Consent")}
         </button>
 
         <div style={{ textAlign: "center" }}>
@@ -895,14 +971,14 @@ const AnonReviewMobile = ({ theme, onBack, onConfirm }) => {
           fontSize: 11.5, fontWeight: 600, color: t.accent, fontFamily: "'Outfit', sans-serif",
           marginBottom: 16,
         }}>
-          {Icons.eyeOff(t.accent, 13)} Anonymous mode
+          {Icons.eyeOff(t.accent, 13)} Confidential mode
         </div>
 
         <h1 style={{
           fontFamily: "'Instrument Serif', Georgia, serif", fontSize: 28,
           fontWeight: 400, color: t.text, margin: "0 0 6px", letterSpacing: "-0.02em", lineHeight: 1.15,
         }}>
-          Anonymous<br />symptom review
+          Confidential<br />symptom review
         </h1>
         <p style={{ fontSize: 14, color: t.textSec, fontFamily: "'Outfit', sans-serif", margin: "0 0 28px", lineHeight: 1.5 }}>
           with our AI agent.
@@ -915,7 +991,7 @@ const AnonReviewMobile = ({ theme, onBack, onConfirm }) => {
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
             {Icons.shield(t.accent, 16)}
-            <span style={{ fontSize: 12, fontWeight: 600, color: t.accent, fontFamily: "'Outfit', sans-serif" }}>De-identified Summary</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: t.accent, fontFamily: "'Outfit', sans-serif" }}>Restricted Access Summary</span>
           </div>
           <p style={{ fontSize: 15, color: t.text, fontFamily: "'Outfit', sans-serif", margin: 0, lineHeight: 1.6, fontWeight: 500 }}>
             I've had a sore throat for several days.
@@ -942,7 +1018,7 @@ const AnonReviewMobile = ({ theme, onBack, onConfirm }) => {
         }}>
           {Icons.lock(t.textMut, 12)}
           <span style={{ fontSize: 11, color: t.textMut, fontFamily: "'Outfit', sans-serif" }}>
-            Your identity remains anonymous until you choose to reveal it
+            Your records are private and never shared with insurance
           </span>
         </div>
       </div>
@@ -1043,6 +1119,17 @@ const SettingsMobile = ({ theme, onBack, session, onNavigate }) => {
           <h3 style={{ fontSize: 12, fontWeight: 700, color: t.textMut, fontFamily: "'Outfit', sans-serif", textTransform: "uppercase", letterSpacing: "0.06em", padding: "14px 0 4px" }}>Privacy</h3>
           <SettingsRow icon={Icons.eyeOff(t.accent)} label="Anonymize patient activity" desc="Your identity will be reserved from matching providers" right={<Toggle active={anon} theme={theme} onChange={() => setAnon(!anon)} />} />
           <SettingsRow icon={Icons.database(t.accent)} label="Data Management" right={Icons.chevRight(t.textMut)} border={false} />
+        </div>
+
+        {/* Support */}
+        <div style={{
+          padding: "4px 20px 0", borderRadius: 16, background: t.bgCard,
+          border: `1px solid ${t.border}`, boxShadow: t.shadow, marginBottom: 20,
+        }}>
+          <h3 style={{ fontSize: 12, fontWeight: 700, color: t.textMut, fontFamily: "'Outfit', sans-serif", textTransform: "uppercase", letterSpacing: "0.06em", padding: "14px 0 4px" }}>Support</h3>
+          <div onClick={() => onNavigate("about")} style={{ cursor: "pointer" }}>
+            <SettingsRow icon={Icons.circle(t.accent)} label="About AnonyHealth" desc="v1.0.2 • Confidential" right={Icons.chevRight(t.textMut)} border={false} />
+          </div>
         </div>
       </div>
     </>
@@ -1156,14 +1243,14 @@ const AboutMobile = ({ theme, onBack }) => {
           icon={Icons.search(t.success)}
           color={t.success}
           title="Find Providers"
-          desc="Browse our directory of verified healthcare professionals. Filter by specialty and location. Data is securely fetched from our database."
+          desc="Browse our directory of verified healthcare professionals. We prioritize your privacy and do not share your search history with insurance."
         />
 
         <AboutCard
           icon={Icons.lock(t.error)}
           color={t.error}
-          title="Private & Secure"
-          desc="Your session is anonymous by default. When you choose to sign up, your data is encrypted. We prioritize your privacy above all."
+          title="Confidential Care"
+          desc="We verify your identity for legal compliance (Maryland Telehealth), but we operate on a self-pay basis to keep your records private from family/insurance."
         />
 
         <div style={{ marginTop: 32, padding: 20, background: t.bgNav, borderRadius: 16, border: `1px solid ${t.border}`, textAlign: "center" }}>
@@ -1328,6 +1415,7 @@ function AnonyHealthAppContent() {
       case "register": return <RegisterMobile theme={theme} onBack={() => setMobileScreen("dashboard")} />;
       case "settings": return <SettingsMobile theme={theme} session={session} onNavigate={(s) => setMobileScreen(s)} onBack={() => setMobileScreen("dashboard")} />;
       case "about": return <AboutMobile theme={theme} onBack={() => setMobileScreen("dashboard")} />;
+      case "history": return <HistoryMobile theme={theme} onBack={() => setMobileScreen("dashboard")} />;
       default: return <PatientDashboard theme={theme} onNavigate={(s) => setMobileScreen(s)} />;
     }
   };
@@ -1401,7 +1489,7 @@ function AnonyHealthAppContent() {
               <span style={{
                 fontSize: 10, fontWeight: 600, color: t.accent, opacity: 0.8, letterSpacing: "0.05em", marginTop: 2
               }}>
-                PROTOTYPE
+                CONFIDENTIAL PROTO
               </span>
             </div>
           </div>

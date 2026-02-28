@@ -65,6 +65,21 @@ values
     ARRAY['Family Medicine', 'Wellness', 'Preventive Care', 'Geriatrics']
   );
 
+-- 3. Health Logs (History)
+create table health_logs (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references auth.users not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  symptom text,
+  severity int, -- 1-10
+  ai_advice text
+);
+
+-- Enable RLS
+alter table health_logs enable row level security;
+create policy "Users can view own logs" on health_logs for select using (auth.uid() = user_id);
+create policy "Users can insert own logs" on health_logs for insert with check (auth.uid() = user_id);
+
 -- Enable Row Level Security (optional, for read access)
 alter table providers enable row level security;
 

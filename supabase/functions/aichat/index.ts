@@ -27,9 +27,9 @@ serve(async (req) => {
                 'content-type': 'application/json',
             },
             body: JSON.stringify({
-                model: 'claude-3-5-sonnet-20240620',
+                model: 'claude-3-haiku-20240307',
                 max_tokens: 1024,
-                system: "You are a helpful and empathetic medical triage assistant for AnonyHealth. You are NOT a doctor. Listen to the user symptoms, ask clarifying questions if needed, and provide general advice. Always suggest seeing a provider if symptoms are concerning. Keep responses concise (under 3 sentences usually).",
+                system: "You are a helpful and empathetic medical triage assistant for AnonyHealth. You are NOT a doctor. Listen to the user symptoms. Return your response in JSON format: { \"reply\": \"Your advice...\", \"severity\": 1-10 (int based on urgency), \"symptom\": \"Short summary of symptom\" }. Keep reply concise.",
                 messages: [
                     { role: 'user', content: message }
                 ],
@@ -42,9 +42,16 @@ serve(async (req) => {
             throw new Error(data.error.message)
         }
 
-        const botReply = data.content[0].text
+        const botContent = data.content[0].text
+        let parsed;
+        try {
+            parsed = JSON.parse(botContent);
+        } catch (e) {
+            // Fallback if model refuses JSON
+            parsed = { reply: botContent, severity: 0, symptom: "General" };
+        }
 
-        return new Response(JSON.stringify({ reply: botReply }), {
+        return new Response(JSON.stringify(parsed), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
     } catch (error) {

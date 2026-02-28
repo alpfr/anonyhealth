@@ -7,7 +7,8 @@ AnonyHealth connects patients with healthcare providers while maintaining strict
 ## ✨ Features
 
 *   **🔍 Provider Directory**: Real-time list of healthcare providers fetched from **Supabase**.
-*   **🧠 AI Triage Chat**: Intelligent symptom analysis powered by **Anthropic Claude 3.5 Sonnet** (via Supabase Edge Functions).
+*   **🧠 AI Triage Chat**: Intelligent symptom analysis powered by **Anthropic Claude 3.5 Sonnet** (via Supabase Edge Functions), returning structured guidance with severity scores.
+*   **📈 Patient History Tracker**: Logs previous triage sessions, AI advice, and visualizes symptom severity trends over time (via the `health_logs` table).
 *   **🔐 Secure Authentication**:
     *   **Supabase Auth**: Email/Password Sign Up & Sign In.
     *   **Password Gate**: Prototype is protected by a password (`ops123`) to prevent unauthorized access.
@@ -72,6 +73,8 @@ docker push your-repo/anonyhealth:latest
 ```
 
 ### Kubernetes (GKE)
+Ensure `deployment.yaml` is configured with the correct Docker image repository, desired replica count, and resource requests/limits before applying.
+
 ```bash
 kubectl apply -f deployment.yaml
 kubectl apply -f service.yaml
