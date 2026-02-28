@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: anonyhealth-network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: anonyhealth
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow traffic from GKE Ingress controller
+    - ports:
+      - port: 8080
+        protocol: TCP
+  egress:
+    # Allow DNS resolution
+    - to: []
+      ports:
+      - port: 53
+        protocol: UDP
+      - port: 53
+        protocol: TCP
+    # Allow HTTPS outbound (Supabase, Google Fonts, Anthropic API)
+    - to: []
+      ports:
+      - port: 443
+        protocol: TCP

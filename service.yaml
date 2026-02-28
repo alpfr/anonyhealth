@@ -2,11 +2,14 @@ apiVersion: v1
 kind: Service
 metadata:
   name: anonyhealth
+  labels:
+    app: anonyhealth
 spec:
   type: ClusterIP
   ports:
   - port: 80
     targetPort: 8080
+    protocol: TCP
   selector:
     app: anonyhealth
 ---
@@ -34,3 +37,11 @@ spec:
   redirectToHttps:
     enabled: true
     responseCodeName: MOVED_PERMANENTLY_DEFAULT
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: anonyhealth-cert
+spec:
+  domains:
+    - anonyhealth.opssightai.com

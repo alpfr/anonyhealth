@@ -1,0 +1,36 @@
+steps:
+  # Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--platform'
+      - 'linux/amd64'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth:$SHORT_SHA'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth:latest'
+      - '.'
+
+  # Push the image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '--all-tags'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth'
+
+  # Deploy to GKE
+  - name: 'gcr.io/cloud-builders/gke-deploy'
+    args:
+      - 'run'
+      - '--filename=deployment.yaml,service.yaml,network-policy.yaml,hpa.yaml,pdb.yaml'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth:$SHORT_SHA'
+      - '--location=us-central1'
+      - '--cluster=anonyhealth-cluster'
+      - '--project=$PROJECT_ID'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth:$SHORT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth:latest'

@@ -6,6 +6,12 @@ metadata:
     app: anonyhealth
 spec:
   replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: anonyhealth
@@ -14,15 +20,26 @@ spec:
       labels:
         app: anonyhealth
     spec:
+      serviceAccountName: anonyhealth-sa
       securityContext:
         runAsNonRoot: true
         runAsUser: 101
         fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: anonyhealth
       containers:
       - name: anonyhealth
         image: us-central1-docker.pkg.dev/alpfr-splunk-integration/healthcare-repo/anonyhealth:latest
         ports:
         - containerPort: 8080
+          protocol: TCP
         resources:
           requests:
             memory: "128Mi"
@@ -46,6 +63,13 @@ spec:
           periodSeconds: 30
           timeoutSeconds: 3
           failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 2
+          periodSeconds: 5
+          failureThreshold: 10
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: false
