@@ -27,7 +27,7 @@ AnonyHealth bypasses human judgment in the first step. Anthropic’s Claude acts
 To meet compliance, telemedicine *must* eventually verify identity (Name, DOB). However, AnonyHealth explicitly isolates the patient's identity in a walled-off database schema (the `patient_profiles` table). The actual symptom triage log (`health_logs`) is only tied to an encrypted UUID. If the core app is breached, the symptoms and the identity are physically isolated.
 
 ### 🩺 Real-Time Interactive Provider Directory
-The AI doesn't just stop at giving advice. It filters the Supabase-powered provider list to proactively surface doctors, specialists, or therapists matching the specific, anonymized severity of the patient's complaint (e.g. flagging Telehealth availability automatically).
+The AI doesn't just stop at giving advice. It filters the live PostgreSQL-powered provider list to proactively surface doctors, specialists, or therapists matching the specific, anonymized severity of the patient's complaint (e.g. flagging Telehealth availability automatically).
 
 ---
 

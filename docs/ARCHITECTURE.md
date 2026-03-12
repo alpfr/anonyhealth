@@ -11,12 +11,13 @@ AnonyHealth is built as a privacy-centric, cloud-native web application. The arc
 - **Hosting Engine:** Served via lightweight, high-performance `Nginx` container.
 
 ### Backend & Database (Data Layer)
-- **Provider:** Supabase
+- **Database API:** PostgREST providing a secure RESTful API routing directly to PostgreSQL.
 - **Database:** PostgreSQL storing isolated datasets:
   - `providers`: Directory of healthcare experts (Public Read).
   - `health_logs`: Time-stamped user triage history spanning symptoms and severity scores. Row-Level Security (RLS) restricts access entirely to the authenticated user.
   - `patient_profiles`: Securely houses Personal Identifiable Information (PII) required for telehealth compliance independently from authentication metadata.
-- **Authentication:** Supabase Auth providing JWT-based session management.
+- **Authentication:** Google Identity Platform (Firebase Auth) handles frontend user sessions and generates secure Identity JWTs. 
+- **Auth Proxy (Middleware):** A custom Node.js Express service on Google Cloud Run acts as a secure bridge. It validates incoming Firebase tokens and re-signs them with specific PostgreSQL `role` claims required by the PostgREST database backend.
 
 ### Artificial Intelligence (Logic Layer)
 - **Engine:** Anthropic Claude (claude-3-haiku).
