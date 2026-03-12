@@ -17,9 +17,10 @@ AnonyHealth connects patients with healthcare providers while maintaining strict
 ## Tech Stack
 
 - **Frontend**: React 19, Vite 7, JavaScript (JSX)
-- **Backend**: Supabase (PostgreSQL, Auth, Edge Functions)
+- **Backend / DB**: PostgREST (PostgreSQL), Supabase Edge Functions
+- **Authentication**: Firebase Auth (Identity Platform) + Custom Node.js Cloud Run Auth Proxy
 - **AI**: Anthropic Claude API (claude-3-haiku via Edge Function)
-- **Infrastructure**: Docker (multi-stage), Nginx, Kubernetes (GKE)
+- **Infrastructure**: Docker (multi-stage), Nginx, Kubernetes (GKE), Google Cloud Run
 - **Fonts**: Outfit, Instrument Serif (Google Fonts)
 
 ## Getting Started
@@ -37,13 +38,16 @@ AnonyHealth connects patients with healthcare providers while maintaining strict
    npm install
    ```
 
-2. Create a `.env` file in the project root:
+2. The application uses **Firebase Auth** for identity management. The frontend requests a Google Identity JWT which is intercepted by our custom backend proxy.
+   Create a `.env` file in the project root:
    ```env
-   VITE_SUPABASE_URL=your_supabase_url
-   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+   VITE_FIREBASE_API_KEY=your_firebase_api_key
+   VITE_FIREBASE_AUTH_DOMAIN=your_firebase_auth_domain
    ```
+   *(Note: The `src/supabaseClient.js` hardcodes the current staging environment configs).*
 
-3. Set up the Supabase database — run `supabase_schema.sql` in the Supabase SQL Editor. This creates:
+3. Set up the Database schema — run `gcp-db-init.sql` for your PostgreSQL instance. This creates:
+   - `roles` for PostgREST (`authenticator`, `anon`, `authenticated`)
    - `providers` table with mock provider data and public read RLS
    - `health_logs` table with per-user RLS for triage history
 
@@ -53,11 +57,16 @@ AnonyHealth connects patients with healthcare providers while maintaining strict
    supabase secrets set ANTHROPIC_API_KEY=sk-...
    ```
 
-5. Run locally:
+5. Run the web frontend locally:
    ```bash
    npm run dev
    ```
-   Open `http://localhost:5173` — prototype password is `ops123`.
+   Open `http://localhost:5173`. We have implemented an **Auto-Registration** flow: you can enter *any* email and password on the login screen, and the system will silently register you in Firebase and drop you into the Patient Dashboard!
+   
+6. **Auth Proxy Deployment:** A Node.js middleware sits between Firebase Auth and PostgREST. It verifies Firebase tokens and mints internal JWTs with the required PostgreSQL `role` claims.
+   ```bash
+   ./deploy_auth_proxy.sh
+   ```
 
 ### Database Schema
 

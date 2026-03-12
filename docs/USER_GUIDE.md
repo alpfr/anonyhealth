@@ -8,11 +8,11 @@ This document outlines how an end-user navigates the AnonyHealth portal to check
 
 AnonyHealth is designed as a gated prototype. Upon loading the application (`http://localhost:5173` or your live URL), you will be greeted by the **Login Screen**.
 
-1. **Prototype Access:** Enter the prototype password (e.g., `ops123`) if prompted to unlock the environment.
-2. **Account Registration:** 
-   - New users click **"Create an Account"**. You will be asked for an email layout and password.
-   - For telehealth compliance (e.g., Maryland), you may be prompted to verify your Identity (Name, DOB, Address). *Note: This PII is isolated from your active symptom triage logic.*
-3. **Sign In:** Existing users enter their Email and Password.
+1. **Prototype Access / Registration:** 
+   - Enter **any email** and password (e.g., `ops123`) into the login inputs.
+   - If the account does not exist, the system will *automatically register* your email behind the scenes and securely transition you to the dashboard.
+   - If the account does exist, you will simply sign in.
+   - For telehealth compliance (e.g., Maryland), you may be prompted to verify your Identity (Name, DOB, Address) within the application itself. *Note: This PII is isolated from your active symptom triage logic.*
 
 ---
 

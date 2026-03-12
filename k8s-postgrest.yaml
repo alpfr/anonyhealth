@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgrest-secrets
+type: Opaque
+stringData:
+  # The Cloud SQL Auth Proxy sidecar exposes the database securely on 127.0.0.1:5432
+  PGRST_DB_URI: "postgres://authenticator:anonyhealth_auth_password@127.0.0.1:5432/postgres"
+  # This secret is used to sign/verify JWTs (must be at least 32 characters)
+  PGRST_JWT_SECRET: "your-super-secret-jwt-token-with-at-least-32-characters-long"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgrest
+  labels:
+    app: postgrest
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgrest
+  template:
+    metadata:
+      labels:
+        app: postgrest
+    spec:
+      containers:
+      - name: postgrest
+        image: postgrest/postgrest:v12.2.0
+        ports:
+        - containerPort: 3000
+        env:
+        - name: PGRST_DB_URI
+          valueFrom:
+            secretKeyRef:
+              name: postgrest-secrets
+              key: PGRST_DB_URI
+        - name: PGRST_DB_SCHEMAS
+          value: "public"
+        - name: PGRST_DB_ANON_ROLE
+          value: "anon"
+        - name: PGRST_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: postgrest-secrets
+              key: PGRST_JWT_SECRET
+      - name: cloud-sql-proxy
+        image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.0
+        args:
+          - "--port=5432"
+          - "alpfr-splunk-integration:us-central1:anonyhealth-db"
+        securityContext:
+          runAsNonRoot: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgrest
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 3000
+  selector:
+    app: postgrest

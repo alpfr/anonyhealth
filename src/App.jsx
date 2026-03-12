@@ -54,7 +54,14 @@ const AuthGate = ({ children }) => {
     if (!email || !password) { setError("Please enter email and password."); return; }
     setSubmitting(true);
     setError("");
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    let { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error && (error.message.toLowerCase().includes("invalid") || error.message.toLowerCase().includes("not found"))) {
+      const signUpRes = await supabase.auth.signUp({ email, password });
+      data = signUpRes.data;
+      error = signUpRes.error;
+    }
+
     if (error) {
       setError(error.message);
     } else if (data?.user) {

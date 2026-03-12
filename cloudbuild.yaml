@@ -6,7 +6,7 @@ steps:
       - '--platform'
       - 'linux/amd64'
       - '-t'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth:$SHORT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth:$BUILD_ID'
       - '-t'
       - 'us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth:latest'
       - '.'
@@ -19,18 +19,36 @@ steps:
       - 'us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth'
 
   # Deploy to GKE
-  - name: 'gcr.io/cloud-builders/gke-deploy'
+  - name: 'gcr.io/cloud-builders/kubectl'
     args:
-      - 'run'
-      - '--filename=deployment.yaml,service.yaml,network-policy.yaml,hpa.yaml,pdb.yaml'
-      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth:$SHORT_SHA'
-      - '--location=us-central1'
-      - '--cluster=anonyhealth-cluster'
-      - '--project=$PROJECT_ID'
+      - 'apply'
+      - '-f'
+      - 'deployment.yaml'
+      - '-f'
+      - 'service.yaml'
+      - '-f'
+      - 'network-policy.yaml'
+      - '-f'
+      - 'hpa.yaml'
+      - '-f'
+      - 'pdb.yaml'
+    env:
+      - 'CLOUDSDK_COMPUTE_ZONE=us-central1-a'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=opssightai-cluster'
+
+  - name: 'gcr.io/cloud-builders/kubectl'
+    args:
+      - 'set'
+      - 'image'
+      - 'deployment/anonyhealth'
+      - 'anonyhealth=us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth:$BUILD_ID'
+    env:
+      - 'CLOUDSDK_COMPUTE_ZONE=us-central1-a'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=opssightai-cluster'
 
 options:
   logging: CLOUD_LOGGING_ONLY
 
 images:
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth:$SHORT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth:$BUILD_ID'
   - 'us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth:latest'
