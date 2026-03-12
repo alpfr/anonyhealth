@@ -18,6 +18,33 @@ function getCorsHeaders(req: Request) {
     }
 }
 
+// Simple in-memory rate limiting (per Edge Function instance)
+const rateLimitMap = new Map<string, { count: number, resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const MAX_REQUESTS_PER_WINDOW = 5;
+
+function isRateLimited(ip: string): boolean {
+    const now = Date.now();
+    const record = rateLimitMap.get(ip);
+    
+    if (!record) {
+        rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+        return false;
+    }
+    
+    if (now > record.resetAt) {
+        rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+        return false;
+    }
+    
+    if (record.count >= MAX_REQUESTS_PER_WINDOW) {
+        return true;
+    }
+    
+    record.count++;
+    return false;
+}
+
 serve(async (req) => {
     const corsHeaders = getCorsHeaders(req)
 
@@ -36,7 +63,16 @@ serve(async (req) => {
     try {
         const { message } = await req.json()
 
-        // Input validation
+        // 1. IP Rate Limiting Check
+        const clientIp = req.headers.get('x-forwarded-for') || 'unknown';
+        if (isRateLimited(clientIp)) {
+            return new Response(JSON.stringify({ error: 'Too many requests. Please wait a minute before sending another message.' }), {
+                status: 429,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            })
+        }
+
+        // 2. Input validation
         if (!message || typeof message !== 'string') {
             return new Response(JSON.stringify({ error: 'Message is required and must be a string' }), {
                 status: 400,
