@@ -71,43 +71,36 @@ serve(async (req) => {
             body: JSON.stringify({
                 model: 'claude-3-haiku-20240307',
                 max_tokens: 1024,
-                system: "You are a helpful and empathetic medical triage assistant for AnonyHealth. You are NOT a doctor. Listen to the user symptoms. Return your response in JSON format: { \"reply\": \"Your advice...\", \"severity\": 1-10 (int based on urgency), \"symptom\": \"Short summary of symptom\" }. Keep reply concise.",
+                stream: true,
+                system: `You are a helpful and empathetic medical triage assistant for AnonyHealth. You are NOT a doctor. Listen to the user symptoms.
+IMPORTANT: You must structure your response in two parts. 
+Part 1: Your concise advice to the user.
+Part 2: You MUST end your response with an XML tag <metadata> containing JSON with {"severity": 1-10, "symptom": "short summary"}.
+Example:
+You should rest and drink water.
+<metadata>{"severity": 2, "symptom": "Sore throat"}</metadata>`,
                 messages: [
                     { role: 'user', content: sanitizedMessage }
                 ],
             }),
         })
 
-        const data = await response.json()
-
-        if (data.error) {
-            console.error('Anthropic API error:', data.error.message)
-            throw new Error('AI service encountered an error')
+        if (!response.ok) {
+            const err = await response.text();
+            throw new Error(`Anthropic error: ${err}`);
         }
 
-        const botContent = data.content[0].text
-        let parsed;
-        try {
-            parsed = JSON.parse(botContent);
-        } catch (e) {
-            parsed = { reply: botContent, severity: 0, symptom: "General" };
-        }
-
-        // Validate severity is within expected range
-        if (typeof parsed.severity === 'number') {
-            parsed.severity = Math.max(0, Math.min(10, Math.round(parsed.severity)));
-        } else {
-            parsed.severity = 0;
-        }
-
-        return new Response(JSON.stringify(parsed), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        return new Response(response.body, {
+            headers: {
+                ...corsHeaders,
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+            },
         })
     } catch (error) {
         // Don't leak internal error details to client
-        const clientMessage = error.message.includes('unavailable') || error.message.includes('encountered')
-            ? error.message
-            : 'An unexpected error occurred'
+        const clientMessage = error.message;
 
         return new Response(JSON.stringify({ error: clientMessage }), {
             status: 500,

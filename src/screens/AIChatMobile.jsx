@@ -48,36 +48,78 @@ export const AIChatMobile = ({ theme, initialMsg, onBack, onBook }) => {
     setTyping(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('aichat', {
-        body: { message: textToSend },
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || anonKey;
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/aichat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ message: textToSend }),
       });
 
-      if (error) throw error;
+      if (!res.ok) throw new Error("Network error");
 
-      const aiResponse = data;
-      if (aiResponse && aiResponse.reply) {
-        setMsgs(prev => [...prev, { role: "bot", text: aiResponse.reply }]);
+      setTyping(false);
+      setMsgs(prev => [...prev, { role: "bot", text: "" }]);
 
-        // Log to history if severity is present
-        if (aiResponse.severity) {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user) {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+      let fullText = "";
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        if (value) {
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ') && line.trim() !== 'data: [DONE]') {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.type === 'content_block_delta' && data.delta?.text) {
+                  fullText += data.delta.text;
+                  let display = fullText;
+                  if (display.includes('<metadata>')) {
+                    display = display.split('<metadata>')[0].trim();
+                  }
+                  
+                  setMsgs(prev => {
+                    const newMsgs = [...prev];
+                    newMsgs[newMsgs.length - 1].text = display;
+                    return newMsgs;
+                  });
+                }
+              } catch (e) {}
+            }
+          }
+        }
+      }
+
+      // Log to history if severity is present in the streamed metadata
+      if (fullText.includes('<metadata>')) {
+        const metaStr = fullText.split('<metadata>')[1].replace('</metadata>', '');
+        try {
+          const aiResponse = JSON.parse(metaStr);
+          if (aiResponse.severity && session?.user) {
             await supabase.from('health_logs').insert({
               user_id: session.user.id,
               symptom: aiResponse.symptom || "Triage Session",
               severity: aiResponse.severity,
-              ai_advice: aiResponse.reply
+              ai_advice: fullText.split('<metadata>')[0].trim()
             });
           }
-        }
-      } else {
-        throw new Error("No reply in data");
+        } catch(e) { console.error("Meta parse error", e); }
       }
+
     } catch (err) {
       console.error("AI Error:", err);
-      // Fallback message if AI fails (or no API key set)
       setMsgs(prev => [...prev, { role: "bot", text: "I'm having trouble connecting to the AI service. Please try again in a moment." }]);
-    } finally {
       setTyping(false);
     }
   };
