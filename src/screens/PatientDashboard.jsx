@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { T, Icons } from "../constants/theme";
+import { MobileNav } from "../components/MobileNav";
 
 // ═══════════════════════════════════════════════════════════
 // SCREEN: PATIENT DASHBOARD (MOBILE)

@@ -4,32 +4,32 @@ import { MobileNav } from "../components/MobileNav";
 // ═══════════════════════════════════════════════════════════
 // SCREEN: ABOUT & NAVIGATION (MOBILE)
 // ═══════════════════════════════════════════════════════════
+const AboutCard = ({ icon, title, desc, color, t }) => (
+  <div style={{
+    background: t.bgCard, borderRadius: 16, padding: 16,
+    border: `1px solid ${t.border}`, marginBottom: 16,
+    boxShadow: t.shadow,
+  }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+      <div style={{
+        width: 36, height: 36, borderRadius: 10, background: `${color}15`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        {icon}
+      </div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: t.text, fontFamily: "'Outfit', sans-serif" }}>
+        {title}
+      </div>
+    </div>
+    <div style={{ fontSize: 13.5, lineHeight: 1.5, color: t.textSec, fontFamily: "'Outfit', sans-serif" }}>
+      {desc}
+    </div>
+  </div>
+);
+
 export const AboutMobile = ({ theme, onBack }) => {
   const t = T[theme];
   const isDark = theme === "dark";
-
-  const AboutCard = ({ icon, title, desc, color }) => (
-    <div style={{
-      background: t.bgCard, borderRadius: 16, padding: 16,
-      border: `1px solid ${t.border}`, marginBottom: 16,
-      boxShadow: t.shadow,
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-        <div style={{
-          width: 36, height: 36, borderRadius: 10, background: `${color}15`,
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }}>
-          {icon}
-        </div>
-        <div style={{ fontSize: 15, fontWeight: 700, color: t.text, fontFamily: "'Outfit', sans-serif" }}>
-          {title}
-        </div>
-      </div>
-      <div style={{ fontSize: 13.5, lineHeight: 1.5, color: t.textSec, fontFamily: "'Outfit', sans-serif" }}>
-        {desc}
-      </div>
-    </div>
-  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: t.bg, animation: "fadeUp 0.3s ease-out" }}>
@@ -54,6 +54,7 @@ export const AboutMobile = ({ theme, onBack }) => {
         </div>
 
         <AboutCard
+          t={t}
           icon={Icons.bot(t.accent)}
           color={t.accent}
           title="AI Triage Chat"
@@ -61,6 +62,7 @@ export const AboutMobile = ({ theme, onBack }) => {
         />
 
         <AboutCard
+          t={t}
           icon={Icons.search(t.success)}
           color={t.success}
           title="Find Providers"
@@ -68,6 +70,7 @@ export const AboutMobile = ({ theme, onBack }) => {
         />
 
         <AboutCard
+          t={t}
           icon={Icons.lock(t.danger)}
           color={t.danger}
           title="Confidential Care"
