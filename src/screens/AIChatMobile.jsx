@@ -1,38 +1,45 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "../supabaseClient";
 import { T, Icons } from "../constants/theme";
 import { MobileNav } from "../components/MobileNav";
+import { sanitizeChatMessage } from "../utils/validation";
+import { insertHealthLog } from "../services/healthLogs";
 
 // ═══════════════════════════════════════════════════════════
 // SCREEN: AI CHAT (MOBILE)
 // ═══════════════════════════════════════════════════════════
-const CHAT_MSGS = [
-  { role: "bot", text: "Hello! I'm your AI Triage & Medical Assistant. What symptoms are you experiencing?" },
-  { role: "user", text: "I've had a sore throat for several days." },
-  { role: "bot", text: "Thank you — let me help. Based on your description, you may require medical attention. Would you like to book an appointment with a matching provider?" },
-];
-
 export const AIChatMobile = ({ theme, initialMsg, onBack, onBook }) => {
   const t = T[theme];
   const [msgs, setMsgs] = useState(initialMsg ? [{ role: "user", text: initialMsg }] : []);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const chatRef = useRef(null);
+  const abortRef = useRef(null);
   const isDark = theme === "dark";
 
+  // Intentionally only runs on mount with initialMsg — not on every handleSend/msgs change
   useEffect(() => {
     if (initialMsg && msgs.length === 1 && msgs[0].role === "user") {
-      // Automatically send initial message
       handleSend(initialMsg, true);
     }
-  }, [initialMsg]);
+  }, [initialMsg]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
   }, [msgs, typing]);
 
-  const handleSend = async (textOverride = null, skipUserAdd = false) => {
-    const textToSend = (textOverride || input).trim();
+  // Cleanup: abort any in-flight request when component unmounts
+  useEffect(() => {
+    return () => {
+      if (abortRef.current) {
+        abortRef.current.abort();
+      }
+    };
+  }, []);
+
+  const handleSend = useCallback(async (textOverride = null, skipUserAdd = false) => {
+    const raw = textOverride || input;
+    const textToSend = sanitizeChatMessage(raw);
     if (!textToSend) return;
 
     if (textToSend.length > 2000) {
@@ -44,6 +51,13 @@ export const AIChatMobile = ({ theme, initialMsg, onBack, onBook }) => {
       setMsgs(prev => [...prev, { role: "user", text: textToSend }]);
       setInput("");
     }
+
+    // Abort any previous in-flight request
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     setTyping(true);
 
@@ -60,9 +74,15 @@ export const AIChatMobile = ({ theme, initialMsg, onBack, onBook }) => {
           "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify({ message: textToSend }),
+        signal: controller.signal,
       });
 
-      if (!res.ok) throw new Error("Network error");
+      if (!res.ok) {
+        const status = res.status;
+        if (status === 429) throw new Error("Too many requests. Please wait a moment and try again.");
+        if (status >= 500) throw new Error("AI service is temporarily unavailable. Please try again later.");
+        throw new Error("Failed to connect to AI service.");
+      }
 
       setTyping(false);
       setMsgs(prev => [...prev, { role: "bot", text: "" }]);
@@ -88,41 +108,45 @@ export const AIChatMobile = ({ theme, initialMsg, onBack, onBook }) => {
                   if (display.includes('<metadata>')) {
                     display = display.split('<metadata>')[0].trim();
                   }
-                  
+
                   setMsgs(prev => {
                     const newMsgs = [...prev];
-                    newMsgs[newMsgs.length - 1].text = display;
+                    newMsgs[newMsgs.length - 1] = { ...newMsgs[newMsgs.length - 1], text: display };
                     return newMsgs;
                   });
                 }
-              } catch (e) {}
+              } catch {
+                // Skip malformed SSE chunks
+              }
             }
           }
         }
       }
 
       // Log to history if severity is present in the streamed metadata
-      if (fullText.includes('<metadata>')) {
-        const metaStr = fullText.split('<metadata>')[1].replace('</metadata>', '');
+      if (fullText.includes('<metadata>') && session?.user) {
         try {
+          const metaStr = fullText.split('<metadata>')[1]?.replace('</metadata>', '');
           const aiResponse = JSON.parse(metaStr);
-          if (aiResponse.severity && session?.user) {
-            await supabase.from('health_logs').insert({
-              user_id: session.user.id,
-              symptom: aiResponse.symptom || "Triage Session",
+          if (aiResponse.severity) {
+            await insertHealthLog(session.user.id, {
+              symptom: aiResponse.symptom,
               severity: aiResponse.severity,
-              ai_advice: fullText.split('<metadata>')[0].trim()
+              ai_advice: fullText.split('<metadata>')[0].trim(),
             });
           }
-        } catch(e) { console.error("Meta parse error", e); }
+        } catch(parseErr) {
+          console.error("Meta parse error", parseErr);
+        }
       }
 
     } catch (err) {
+      if (err.name === "AbortError") return; // User cancelled, don't show error
       console.error("AI Error:", err);
-      setMsgs(prev => [...prev, { role: "bot", text: "I'm having trouble connecting to the AI service. Please try again in a moment." }]);
+      setMsgs(prev => [...prev, { role: "bot", text: err.message || "I'm having trouble connecting to the AI service. Please try again in a moment." }]);
       setTyping(false);
     }
-  };
+  }, [input]);
 
   return (
     <>
@@ -145,7 +169,7 @@ export const AIChatMobile = ({ theme, initialMsg, onBack, onBook }) => {
             {Icons.bot("#fff")}
           </div>
           <div style={{ fontSize: 14, fontWeight: 700, color: t.text, fontFamily: "'Outfit', sans-serif" }}>AI Triage Assistant</div>
-          <div style={{ fontSize: 11.5, color: t.textMut, fontFamily: "'Outfit', sans-serif", marginTop: 2 }}>Confidential session • No insurance shared</div>
+          <div style={{ fontSize: 11.5, color: t.textMut, fontFamily: "'Outfit', sans-serif", marginTop: 2 }}>Confidential session</div>
         </div>
 
         {msgs.length === 0 && (

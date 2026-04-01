@@ -1,34 +1,36 @@
 import { useState, useEffect } from "react";
-import { supabase } from "../supabaseClient";
 import { T, Icons } from "../constants/theme";
 import { MobileNav } from "../components/MobileNav";
+import { useAuth } from "../context/AuthContext";
+import { fetchHealthLogs } from "../services/healthLogs";
 
 // ═══════════════════════════════════════════════════════════
 // SCREEN: HEALTH HISTORY (MOBILE)
 // ═══════════════════════════════════════════════════════════
 export const HistoryMobile = ({ theme, onBack }) => {
   const t = T[theme];
+  const { user } = useAuth();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchLogs = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) {
+    let cancelled = false;
+    const loadLogs = async () => {
+      if (!user) {
         setLoading(false);
         return;
       }
-      const { data, error } = await supabase
-        .from('health_logs')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false })
-        .limit(20);
-      if (!error && data) setLogs(data);
-      setLoading(false);
+      const { data, error } = await fetchHealthLogs(user.id);
+      if (!cancelled) {
+        setLogs(data);
+        if (error) setError("Failed to load history. Please try again.");
+        setLoading(false);
+      }
     };
-    fetchLogs();
-  }, []);
+    loadLogs();
+    return () => { cancelled = true; };
+  }, [user]);
 
   const severityColor = (sev) => {
     if (sev >= 7) return t.danger;
@@ -59,6 +61,19 @@ export const HistoryMobile = ({ theme, onBack }) => {
         {loading ? (
           <div style={{ textAlign: "center", padding: 40, color: t.textMut, fontSize: 14, fontFamily: "'Outfit', sans-serif" }}>
             Loading...
+          </div>
+        ) : error ? (
+          <div style={{
+            textAlign: "center", padding: 24, borderRadius: 16, background: t.bgCard,
+            border: `1px solid ${t.border}`, boxShadow: t.shadow,
+          }}>
+            <div style={{ fontSize: 14, color: t.danger, fontFamily: "'Outfit', sans-serif", marginBottom: 12 }}>{error}</div>
+            <button onClick={() => { setLoading(true); setError(null); fetchHealthLogs(user?.id).then(({ data }) => { setLogs(data); setLoading(false); }); }} style={{
+              padding: "10px 20px", borderRadius: 10, border: "none", cursor: "pointer",
+              background: t.accent, color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: "'Outfit', sans-serif",
+            }}>
+              Retry
+            </button>
           </div>
         ) : logs.length === 0 ? (
           <div style={{

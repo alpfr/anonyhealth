@@ -116,3 +116,24 @@ alter table providers enable row level security;
 create policy "Public providers are viewable by everyone"
   on providers for select
   using ( true );
+
+-- ═══════════════════════════════════════════════════════════
+-- INDEXES for query performance
+-- ═══════════════════════════════════════════════════════════
+
+-- health_logs: frequently queried by user_id + created_at (history screen)
+create index idx_health_logs_user_created on health_logs (user_id, created_at desc);
+
+-- health_logs: severity filtering for analytics
+create index idx_health_logs_severity on health_logs (severity);
+
+-- audit_logs: queried by user_id + created_at for compliance review
+create index idx_audit_logs_user_created on audit_logs (user_id, created_at desc);
+
+-- audit_logs: event_type lookups for SOC 2 auditing
+create index idx_audit_logs_event_type on audit_logs (event_type);
+
+-- providers: specialty filtering on provider directory
+create index idx_providers_specialty on providers (specialty);
+
+-- patient_profiles: no additional index needed (PK lookup only)

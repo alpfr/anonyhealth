@@ -1,10 +1,13 @@
 import { PhoneFrame } from "./components/PhoneFrame";
 import { MobileNav } from "./components/MobileNav";
 import { BottomNav } from "./components/BottomNav";
-import { useState, useEffect, useRef, useCallback } from "react";
-import { supabase } from "./supabaseClient";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 
+import { useAuth } from "./context/AuthContext";
+import { useTheme } from "./context/ThemeContext";
+import { fetchProviders as fetchProvidersService } from "./services/providers";
 import { logAuditEvent } from "./utils/audit";
+import { isValidEmail, isValidPassword } from "./utils/validation";
 import { T, Icons, Stars } from "./constants/theme";
 import { PROVIDERS } from "./data/providers";
 
@@ -12,63 +15,79 @@ import { FilterChip } from "./components/FilterChip";
 import { ProviderCard } from "./components/ProviderCard";
 import { Toggle } from "./components/Toggle";
 
-import { FindProviderDesktop } from "./screens/FindProviderDesktop";
-import { ProviderDetailsMobile } from "./screens/ProviderDetailsMobile";
-import { PatientDashboard } from "./screens/PatientDashboard";
-import { AIChatMobile } from "./screens/AIChatMobile";
-import { RegisterMobile } from "./screens/RegisterMobile";
-import { AnonReviewMobile } from "./screens/AnonReviewMobile";
-import { SettingsMobile } from "./screens/SettingsMobile";
-import { HistoryMobile } from "./screens/HistoryMobile";
-import { FindProviderMobile } from "./screens/FindProviderMobile";
-import { AboutMobile } from "./screens/AboutMobile";
+// Lazy-loaded screens for code splitting
+const FindProviderDesktop = lazy(() => import("./screens/FindProviderDesktop").then(m => ({ default: m.FindProviderDesktop })));
+const ProviderDetailsMobile = lazy(() => import("./screens/ProviderDetailsMobile").then(m => ({ default: m.ProviderDetailsMobile })));
+const PatientDashboard = lazy(() => import("./screens/PatientDashboard").then(m => ({ default: m.PatientDashboard })));
+const AIChatMobile = lazy(() => import("./screens/AIChatMobile").then(m => ({ default: m.AIChatMobile })));
+const RegisterMobile = lazy(() => import("./screens/RegisterMobile").then(m => ({ default: m.RegisterMobile })));
+const AnonReviewMobile = lazy(() => import("./screens/AnonReviewMobile").then(m => ({ default: m.AnonReviewMobile })));
+const SettingsMobile = lazy(() => import("./screens/SettingsMobile").then(m => ({ default: m.SettingsMobile })));
+const HistoryMobile = lazy(() => import("./screens/HistoryMobile").then(m => ({ default: m.HistoryMobile })));
+const FindProviderMobile = lazy(() => import("./screens/FindProviderMobile").then(m => ({ default: m.FindProviderMobile })));
+const AboutMobile = lazy(() => import("./screens/AboutMobile").then(m => ({ default: m.AboutMobile })));
+
+// Loading fallback for lazy components
+const ScreenLoader = ({ theme }) => {
+  const t = T[theme] || T.light;
+  return (
+    <div style={{
+      flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+      fontFamily: "'Outfit', sans-serif", color: t.textMut, fontSize: 14,
+    }}>
+      Loading...
+    </div>
+  );
+};
 
 // ═══════════════════════════════════════════════════════════
-// MAIN APP
-// ═══════════════════════════════════════════════════════════
-// MAIN APP
-// ═══════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════
-// AUTH GATE — Requires Supabase authentication
+// AUTH GATE — Requires authentication
 // ═══════════════════════════════════════════════════════════
 const AuthGate = ({ children }) => {
-  const [session, setSession] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { session, loading, signIn, signUp } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const handleLogin = async () => {
-    if (!email || !password) { setError("Please enter email and password."); return; }
-    setSubmitting(true);
-    setError("");
-    let { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (error && (error.message.toLowerCase().includes("invalid") || error.message.toLowerCase().includes("not found"))) {
-      const signUpRes = await supabase.auth.signUp({ email, password });
-      data = signUpRes.data;
-      error = signUpRes.error;
+  const handleLogin = useCallback(async () => {
+    // Input validation
+    if (!email || !password) {
+      setError("Please enter email and password.");
+      return;
+    }
+    if (!isValidEmail(email)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    if (!isValidPassword(password)) {
+      setError("Password must be at least 6 characters.");
+      return;
     }
 
-    if (error) {
-      setError(error.message);
+    setSubmitting(true);
+    setError("");
+
+    // Try sign in first
+    let { data, error: signInError } = await signIn(email, password);
+
+    // Auto-register only if user not found (not for wrong password)
+    if (signInError) {
+      const msg = signInError.message.toLowerCase();
+      if (msg.includes("no account") || msg.includes("not found") || msg.includes("invalid credential")) {
+        const signUpRes = await signUp(email, password);
+        data = signUpRes.data;
+        signInError = signUpRes.error;
+      }
+    }
+
+    if (signInError) {
+      setError(signInError.message);
     } else if (data?.user) {
       logAuditEvent("auth.sign_in", "User signed in via AuthGate");
     }
     setSubmitting(false);
-  };
+  }, [email, password, signIn, signUp]);
 
   if (loading) {
     return (
@@ -105,6 +124,7 @@ const AuthGate = ({ children }) => {
           value={email}
           onChange={e => setEmail(e.target.value)}
           onKeyDown={e => e.key === "Enter" && handleLogin()}
+          autoComplete="email"
           style={{
             width: "100%", padding: "14px 16px", borderRadius: 12, border: "1px solid #e2e8f0",
             background: "#f1f5f9", fontSize: 14, marginBottom: 12, outline: "none",
@@ -116,6 +136,7 @@ const AuthGate = ({ children }) => {
           value={password}
           onChange={e => setPassword(e.target.value)}
           onKeyDown={e => e.key === "Enter" && handleLogin()}
+          autoComplete="current-password"
           style={{
             width: "100%", padding: "14px 16px", borderRadius: 12, border: `1px solid ${error ? "#ef4444" : "#e2e8f0"}`,
             background: "#f1f5f9", fontSize: 14, marginBottom: 12, outline: "none",
@@ -123,7 +144,7 @@ const AuthGate = ({ children }) => {
           }}
         />
         {error && (
-          <div style={{ fontSize: 13, color: "#ef4444", marginBottom: 12 }}>{error}</div>
+          <div role="alert" style={{ fontSize: 13, color: "#ef4444", marginBottom: 12 }}>{error}</div>
         )}
         <button onClick={handleLogin} disabled={submitting} style={{
           width: "100%", padding: "14px", borderRadius: 12, border: "none", cursor: submitting ? "wait" : "pointer",
@@ -145,69 +166,79 @@ export default function AnonyHealthApp() {
   );
 }
 
+const BREAKPOINT = 1024;
+
 function AnonyHealthAppContent() {
-  const [theme, setTheme] = useState("light");
-  const [desktopScreen, setDesktopScreen] = useState("providers");
+  const { theme, t, isDark, toggleTheme } = useTheme();
+  const { session } = useAuth();
+  // desktopScreen reserved for future desktop-specific navigation
+  const [desktopScreen] = useState("providers"); // eslint-disable-line no-unused-vars
   const [mobileScreen, setMobileScreen] = useState("dashboard");
   const [chatInitialMsg, setChatInitialMsg] = useState("");
   const [selectedProvider, setSelectedProvider] = useState(0);
-  const [providers, setProviders] = useState(PROVIDERS); // Initialize with mock, update with DB
-  const [session, setSession] = useState(null);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
-  const [viewMode, setViewMode] = useState(window.innerWidth < 1024 ? "mobile" : "split");
+  const [providers, setProviders] = useState(PROVIDERS);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < BREAKPOINT);
+  const [viewMode, setViewMode] = useState(window.innerWidth < BREAKPOINT ? "mobile" : "split");
 
+  // Fetch providers from DB with fallback
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    let cancelled = false;
+    fetchProvidersService().then(data => {
+      if (!cancelled) setProviders(data);
     });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
+    return () => { cancelled = true; };
   }, []);
 
+  // Debounced resize handler
   useEffect(() => {
-    const fetchProviders = async () => {
-      const { data, error } = await supabase.from('providers').select('*').order('id', { ascending: true });
-      if (error) console.error("Error fetching providers:", error);
-      else if (data && data.length > 0) setProviders(data);
-    };
-    fetchProviders();
-  }, []);
-
-  useEffect(() => {
+    let timeoutId;
     const handleResize = () => {
-      const mobile = window.innerWidth < 1024;
-      setIsMobile(mobile);
-      if (mobile) setViewMode("mobile");
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        const mobile = window.innerWidth < BREAKPOINT;
+        setIsMobile(mobile);
+        if (mobile) setViewMode("mobile");
+      }, 150);
     };
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener("resize", handleResize);
+    };
   }, []);
-  const t = T[theme];
-  const isDark = theme === "dark";
+
+  // Memoized navigation handler to avoid re-creating on every render
+  const handleMobileNavigate = useCallback((s, msg) => {
+    if (msg) setChatInitialMsg(msg);
+    else setChatInitialMsg("");
+    setMobileScreen(s);
+  }, []);
+
+  const handleSelectProvider = useCallback((i) => {
+    setSelectedProvider(i);
+    setMobileScreen("providerDetail");
+  }, []);
 
   const renderMobile = () => {
-    switch (mobileScreen) {
-      case "dashboard": return <PatientDashboard theme={theme} onNavigate={(s, msg) => {
-        if (msg) setChatInitialMsg(msg);
-        else setChatInitialMsg("");
-        setMobileScreen(s);
-      }} />;
-      case "findProvider": return <FindProviderMobile theme={theme} providers={providers} onSelectProvider={(i) => { setSelectedProvider(i); setMobileScreen("providerDetail"); }} />;
-      case "providerDetail": return <ProviderDetailsMobile theme={theme} provider={selectedProvider} providers={providers} onBack={() => setMobileScreen("findProvider")} onStartAnon={() => setMobileScreen("anonReview")} />;
-      case "anonReview": return <AnonReviewMobile theme={theme} onBack={() => setMobileScreen("providerDetail")} onConfirm={() => setMobileScreen("dashboard")} />;
-      case "chat": return <AIChatMobile theme={theme} initialMsg={chatInitialMsg} onBack={() => setMobileScreen("dashboard")} onBook={() => setMobileScreen("findProvider")} />;
-      case "register": return <RegisterMobile theme={theme} onBack={() => setMobileScreen("dashboard")} />;
-      case "settings": return <SettingsMobile theme={theme} session={session} onNavigate={(s) => setMobileScreen(s)} onBack={() => setMobileScreen("dashboard")} />;
-      case "about": return <AboutMobile theme={theme} onBack={() => setMobileScreen("dashboard")} />;
-      case "history": return <HistoryMobile theme={theme} onBack={() => setMobileScreen("dashboard")} />;
-      default: return <PatientDashboard theme={theme} onNavigate={(s) => setMobileScreen(s)} />;
-    }
+    const screenProps = { theme };
+    return (
+      <Suspense fallback={<ScreenLoader theme={theme} />}>
+        {(() => {
+          switch (mobileScreen) {
+            case "dashboard": return <PatientDashboard {...screenProps} onNavigate={handleMobileNavigate} />;
+            case "findProvider": return <FindProviderMobile {...screenProps} providers={providers} onSelectProvider={handleSelectProvider} />;
+            case "providerDetail": return <ProviderDetailsMobile {...screenProps} provider={selectedProvider} providers={providers} onBack={() => setMobileScreen("findProvider")} onStartAnon={() => setMobileScreen("anonReview")} />;
+            case "anonReview": return <AnonReviewMobile {...screenProps} onBack={() => setMobileScreen("providerDetail")} onConfirm={() => setMobileScreen("dashboard")} />;
+            case "chat": return <AIChatMobile {...screenProps} initialMsg={chatInitialMsg} onBack={() => setMobileScreen("dashboard")} onBook={() => setMobileScreen("findProvider")} />;
+            case "register": return <RegisterMobile {...screenProps} onBack={() => setMobileScreen("dashboard")} />;
+            case "settings": return <SettingsMobile {...screenProps} session={session} onNavigate={(s) => setMobileScreen(s)} onBack={() => setMobileScreen("dashboard")} />;
+            case "about": return <AboutMobile {...screenProps} onBack={() => setMobileScreen("dashboard")} />;
+            case "history": return <HistoryMobile {...screenProps} onBack={() => setMobileScreen("dashboard")} />;
+            default: return <PatientDashboard {...screenProps} onNavigate={(s) => setMobileScreen(s)} />;
+          }
+        })()}
+      </Suspense>
+    );
   };
 
   return (
@@ -254,8 +285,7 @@ function AnonyHealthAppContent() {
         </div>
       )}
 
-      {/* Top Bar */}
-      {/* Top Bar - Hide on mobile */}
+      {/* Sidebar Navigation - Desktop only */}
       {!isMobile && (
         <div style={{
           position: "fixed", top: 0, left: 0, bottom: 0, width: 220, zIndex: 100,
@@ -328,7 +358,7 @@ function AnonyHealthAppContent() {
           </div>
 
           {/* Theme Toggle */}
-          <button onClick={() => setTheme(isDark ? "light" : "dark")} style={{
+          <button onClick={toggleTheme} style={{
             width: "100%", padding: "12px", borderRadius: 12, border: `1px solid ${t.border}`,
             background: t.bgCard, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
             color: t.text, fontSize: 13, fontWeight: 600, fontFamily: "'Outfit', sans-serif"
@@ -356,7 +386,9 @@ function AnonyHealthAppContent() {
                 <div style={{ width: 6, height: 6, borderRadius: 3, background: t.success }} />
                 <span style={{ fontSize: 11, fontWeight: 600, color: t.textSec, fontFamily: "'Outfit', sans-serif" }}>DESKTOP VIEW</span>
               </div>
-              <FindProviderDesktop theme={theme} providers={providers} onSelectProvider={(i) => { setSelectedProvider(i); setMobileScreen("providerDetail"); }} />
+              <Suspense fallback={<ScreenLoader theme={theme} />}>
+                <FindProviderDesktop theme={theme} providers={providers} onSelectProvider={handleSelectProvider} />
+              </Suspense>
             </div>
 
             {/* Mobile */}
@@ -378,7 +410,9 @@ function AnonyHealthAppContent() {
 
         {viewMode === "desktop" && (
           <div style={{ padding: "48px 40px", maxWidth: 920, margin: "0 auto" }}>
-            <FindProviderDesktop theme={theme} providers={providers} onSelectProvider={(i) => { setSelectedProvider(i); setMobileScreen("providerDetail"); setViewMode("mobile"); }} />
+            <Suspense fallback={<ScreenLoader theme={theme} />}>
+              <FindProviderDesktop theme={theme} providers={providers} onSelectProvider={(i) => { setSelectedProvider(i); setMobileScreen("providerDetail"); setViewMode("mobile"); }} />
+            </Suspense>
           </div>
         )}
 
