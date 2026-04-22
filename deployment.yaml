@@ -27,10 +27,13 @@ spec:
         fsGroup: 101
         seccompProfile:
           type: RuntimeDefault
+      # ScheduleAnyway lets the pod land on a node that already hosts an
+      # anonyhealth pod when the cluster is tight. Prefer spread but don't
+      # deadlock rollouts when autoscaler is in backoff.
       topologySpreadConstraints:
       - maxSkew: 1
         topologyKey: kubernetes.io/hostname
-        whenUnsatisfiable: DoNotSchedule
+        whenUnsatisfiable: ScheduleAnyway
         labelSelector:
           matchLabels:
             app: anonyhealth
@@ -48,8 +51,8 @@ spec:
           mountPath: /tmp/nginx
         resources:
           requests:
-            memory: "128Mi"
-            cpu: "100m"
+            memory: "64Mi"
+            cpu: "50m"
           limits:
             memory: "256Mi"
             cpu: "500m"
