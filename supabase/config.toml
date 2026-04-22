@@ -9,3 +9,8 @@ entrypoint = "./functions/create-user/index.ts"
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/aichat/index.ts"
+
+[functions.log-audit]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/log-audit/index.ts"
