@@ -5,9 +5,10 @@ import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 
 import { useAuth } from "./context/AuthContext";
 import { useTheme } from "./context/ThemeContext";
+import { supabase } from "./supabaseClient";
 import { fetchProviders as fetchProvidersService } from "./services/providers";
 import { logAuditEvent } from "./utils/audit";
-import { isValidEmail, isValidPassword } from "./utils/validation";
+import { isValidEmail, isStrongPassword } from "./utils/validation";
 import { T, Icons, Stars } from "./constants/theme";
 import { PROVIDERS } from "./data/providers";
 
@@ -41,53 +42,84 @@ const ScreenLoader = ({ theme }) => {
 };
 
 // ═══════════════════════════════════════════════════════════
-// AUTH GATE — Requires authentication
+// AUTH GATE — email + password sign in, signup with 6-digit email OTP
 // ═══════════════════════════════════════════════════════════
 const AuthGate = ({ children }) => {
-  const { session, loading, signIn, signUp } = useAuth();
+  const { session, loading, signIn } = useAuth();
+  const [mode, setMode] = useState("signin"); // signin | signup | verify
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const handleLogin = useCallback(async () => {
-    // Input validation
-    if (!email || !password) {
-      setError("Please enter email and password.");
+  const resetMessages = () => { setError(""); setInfo(""); };
+
+  const handleSignIn = useCallback(async () => {
+    resetMessages();
+    if (!isValidEmail(email)) { setError("Please enter a valid email address."); return; }
+    if (!password) { setError("Please enter your password."); return; }
+
+    setSubmitting(true);
+    const { data, error: signInError } = await signIn(email, password);
+    setSubmitting(false);
+
+    if (signInError) {
+      setError(signInError.message);
       return;
     }
-    if (!isValidEmail(email)) {
-      setError("Please enter a valid email address.");
-      return;
-    }
-    if (!isValidPassword(password)) {
-      setError("Password must be at least 6 characters.");
+    if (data?.user) logAuditEvent("auth.sign_in", "User signed in");
+  }, [email, password, signIn]);
+
+  const handleSignUp = useCallback(async () => {
+    resetMessages();
+    if (!isValidEmail(email)) { setError("Please enter a valid email address."); return; }
+    if (!isStrongPassword(password)) {
+      setError("Password must be 8+ characters and include uppercase, lowercase, and a digit.");
       return;
     }
 
     setSubmitting(true);
-    setError("");
-
-    // Try sign in first
-    let { data, error: signInError } = await signIn(email, password);
-
-    // Auto-register only if user not found (not for wrong password)
-    if (signInError) {
-      const msg = signInError.message.toLowerCase();
-      if (msg.includes("no account") || msg.includes("not found") || msg.includes("invalid credential")) {
-        const signUpRes = await signUp(email, password);
-        data = signUpRes.data;
-        signInError = signUpRes.error;
-      }
-    }
-
-    if (signInError) {
-      setError(signInError.message);
-    } else if (data?.user) {
-      logAuditEvent("auth.sign_in", "User signed in via AuthGate");
-    }
+    const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
     setSubmitting(false);
-  }, [email, password, signIn, signUp]);
+
+    if (signUpError) { setError(signUpError.message); return; }
+
+    // When email confirmation is enabled, Supabase returns a user with no
+    // session and emails a 6-digit OTP (if the project's confirmation email
+    // template uses {{ .Token }}). Prompt for it.
+    if (data?.session) {
+      logAuditEvent("auth.sign_up", "User signed up (no confirmation required)");
+      return;
+    }
+    setMode("verify");
+    setInfo("We sent a 6-digit code to your email. Enter it below to finish creating your account.");
+  }, [email, password]);
+
+  const handleVerifyOtp = useCallback(async () => {
+    resetMessages();
+    const token = otp.trim();
+    if (!/^\d{6}$/.test(token)) { setError("Enter the 6-digit code from your email."); return; }
+
+    setSubmitting(true);
+    const { data, error: verifyError } = await supabase.auth.verifyOtp({
+      email, token, type: "signup",
+    });
+    setSubmitting(false);
+
+    if (verifyError) { setError(verifyError.message); return; }
+    if (data?.user) logAuditEvent("auth.sign_up", "Email OTP verified");
+  }, [email, otp]);
+
+  const resendOtp = useCallback(async () => {
+    resetMessages();
+    setSubmitting(true);
+    const { error: resendError } = await supabase.auth.resend({ type: "signup", email });
+    setSubmitting(false);
+    if (resendError) setError(resendError.message);
+    else setInfo("Code resent. Check your inbox.");
+  }, [email]);
 
   if (loading) {
     return (
@@ -96,63 +128,107 @@ const AuthGate = ({ children }) => {
       </div>
     );
   }
-
   if (session) return children;
+
+  const activeTabStyle = { borderBottom: "2px solid #0f172a", color: "#0f172a", fontWeight: 600 };
+  const inactiveTabStyle = { borderBottom: "2px solid transparent", color: "#64748b", fontWeight: 500 };
+  const inputStyle = {
+    width: "100%", padding: "14px 16px", borderRadius: 12, border: "1px solid #e2e8f0",
+    background: "#f1f5f9", fontSize: 14, marginBottom: 12, outline: "none", boxSizing: "border-box",
+  };
+  const primaryBtn = (busy) => ({
+    width: "100%", padding: "14px", borderRadius: 12, border: "none",
+    cursor: busy ? "wait" : "pointer", background: "#0f172a", color: "#fff",
+    fontSize: 14, fontWeight: 600, opacity: busy ? 0.7 : 1,
+  });
 
   return (
     <div style={{
       height: "100vh", background: "#f8fafc", fontFamily: "'Outfit', sans-serif",
-      display: "flex", alignItems: "center", justifyContent: "center", padding: 20
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
     }}>
       <div style={{
-        width: "100%", maxWidth: 360, background: "#fff", padding: 32, borderRadius: 24,
-        boxShadow: "0 20px 40px -10px rgba(0,0,0,0.1)", textAlign: "center"
+        width: "100%", maxWidth: 380, background: "#fff", padding: 32, borderRadius: 24,
+        boxShadow: "0 20px 40px -10px rgba(0,0,0,0.1)", textAlign: "center",
       }}>
         <div style={{
           width: 56, height: 56, borderRadius: 16, background: "linear-gradient(135deg, #38bdf8, #818cf8)",
           margin: "0 auto 20px", display: "flex", alignItems: "center", justifyContent: "center",
-          boxShadow: "0 8px 20px rgba(56,189,248,0.25)"
+          boxShadow: "0 8px 20px rgba(56,189,248,0.25)",
         }}>
           {Icons.shield("#fff", 24)}
         </div>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: "#0f172a", marginBottom: 8 }}>AnonyHealth</h2>
-        <p style={{ fontSize: 13, color: "#64748b", marginBottom: 24 }}>Sign in to access the platform.</p>
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: "#0f172a", marginBottom: 20 }}>AnonyHealth</h2>
 
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && handleLogin()}
-          autoComplete="email"
-          style={{
-            width: "100%", padding: "14px 16px", borderRadius: 12, border: "1px solid #e2e8f0",
-            background: "#f1f5f9", fontSize: 14, marginBottom: 12, outline: "none",
-          }}
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && handleLogin()}
-          autoComplete="current-password"
-          style={{
-            width: "100%", padding: "14px 16px", borderRadius: 12, border: `1px solid ${error ? "#ef4444" : "#e2e8f0"}`,
-            background: "#f1f5f9", fontSize: 14, marginBottom: 12, outline: "none",
-            transition: "all 0.2s"
-          }}
-        />
-        {error && (
-          <div role="alert" style={{ fontSize: 13, color: "#ef4444", marginBottom: 12 }}>{error}</div>
+        {mode !== "verify" && (
+          <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: "1px solid #e2e8f0" }}>
+            <button type="button" onClick={() => { setMode("signin"); resetMessages(); }}
+              style={{ flex: 1, padding: "10px", background: "none", border: "none", cursor: "pointer", fontSize: 14, ...(mode === "signin" ? activeTabStyle : inactiveTabStyle) }}>
+              Sign In
+            </button>
+            <button type="button" onClick={() => { setMode("signup"); resetMessages(); }}
+              style={{ flex: 1, padding: "10px", background: "none", border: "none", cursor: "pointer", fontSize: 14, ...(mode === "signup" ? activeTabStyle : inactiveTabStyle) }}>
+              Create account
+            </button>
+          </div>
         )}
-        <button onClick={handleLogin} disabled={submitting} style={{
-          width: "100%", padding: "14px", borderRadius: 12, border: "none", cursor: submitting ? "wait" : "pointer",
-          background: "#0f172a", color: "#fff", fontSize: 14, fontWeight: 600,
-          opacity: submitting ? 0.7 : 1
-        }}>
-          {submitting ? "Signing in..." : "Sign In"}
-        </button>
+
+        {mode === "verify" ? (
+          <>
+            <p style={{ fontSize: 13, color: "#64748b", marginBottom: 16, textAlign: "left" }}>{info}</p>
+            <input
+              inputMode="numeric" maxLength={6} autoComplete="one-time-code"
+              placeholder="6-digit code" value={otp}
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+              onKeyDown={(e) => e.key === "Enter" && handleVerifyOtp()}
+              style={{ ...inputStyle, letterSpacing: "0.5em", textAlign: "center", fontSize: 18 }}
+            />
+            {error && <div role="alert" style={{ fontSize: 13, color: "#ef4444", marginBottom: 12 }}>{error}</div>}
+            <button onClick={handleVerifyOtp} disabled={submitting} style={primaryBtn(submitting)}>
+              {submitting ? "Verifying..." : "Verify"}
+            </button>
+            <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+              <button type="button" onClick={resendOtp} disabled={submitting}
+                style={{ background: "none", border: "none", color: "#38bdf8", cursor: "pointer", padding: 0 }}>
+                Resend code
+              </button>
+              <button type="button" onClick={() => { setMode("signup"); setOtp(""); resetMessages(); }}
+                style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", padding: 0 }}>
+                Use a different email
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <input type="email" inputMode="email" autoComplete="email"
+              placeholder="Email" value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && (mode === "signin" ? handleSignIn() : handleSignUp())}
+              style={inputStyle} />
+            <input type="password"
+              autoComplete={mode === "signin" ? "current-password" : "new-password"}
+              placeholder="Password" value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && (mode === "signin" ? handleSignIn() : handleSignUp())}
+              style={{ ...inputStyle, border: `1px solid ${error ? "#ef4444" : "#e2e8f0"}` }} />
+
+            {mode === "signup" && (
+              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 12, textAlign: "left" }}>
+                Min 8 characters, with uppercase, lowercase, and a digit.
+              </div>
+            )}
+
+            {error && <div role="alert" style={{ fontSize: 13, color: "#ef4444", marginBottom: 12 }}>{error}</div>}
+            {info && <div style={{ fontSize: 13, color: "#16a34a", marginBottom: 12 }}>{info}</div>}
+
+            <button onClick={mode === "signin" ? handleSignIn : handleSignUp}
+              disabled={submitting} style={primaryBtn(submitting)}>
+              {submitting
+                ? (mode === "signin" ? "Signing in..." : "Creating account...")
+                : (mode === "signin" ? "Sign In" : "Create account")}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
