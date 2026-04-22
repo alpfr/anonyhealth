@@ -2,21 +2,28 @@ import { createClient } from '@supabase/supabase-js';
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut, onAuthStateChanged } from "firebase/auth";
 
-// Firebase config from environment variables (fallback to hardcoded for dev only)
+const requireEnv = (name) => {
+  const value = import.meta.env[name];
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
+};
+
 const firebaseConfig = {
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "alpfr-splunk-integration",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:200624997525:web:d2e0ba2e84c9faa094879c",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "alpfr-splunk-integration.firebasestorage.app",
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyAMu05dAHKj8h7xyHgkVL_whkL6mN8XUE4",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "alpfr-splunk-integration.firebaseapp.com",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "200624997525",
+  projectId: requireEnv('VITE_FIREBASE_PROJECT_ID'),
+  appId: requireEnv('VITE_FIREBASE_APP_ID'),
+  storageBucket: requireEnv('VITE_FIREBASE_STORAGE_BUCKET'),
+  apiKey: requireEnv('VITE_FIREBASE_API_KEY'),
+  authDomain: requireEnv('VITE_FIREBASE_AUTH_DOMAIN'),
+  messagingSenderId: requireEnv('VITE_FIREBASE_MESSAGING_SENDER_ID'),
 };
 
 export const firebaseApp = initializeApp(firebaseConfig);
 export const auth = getAuth(firebaseApp);
 
-export const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://auth-proxy-200624997525.us-central1.run.app";
-export const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "dummy-anon-key";
+export const supabaseUrl = requireEnv('VITE_SUPABASE_URL');
+export const supabaseAnonKey = requireEnv('VITE_SUPABASE_ANON_KEY');
 
 const customFetch = async (url, options = {}) => {
   const currentUser = auth.currentUser;

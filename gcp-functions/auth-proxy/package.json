@@ -11,8 +11,8 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "cors": "^2.8.5",
     "express": "^5.2.1",
-    "fireadmin": "^0.0.4",
     "firebase-admin": "^13.7.0",
     "jsonwebtoken": "^9.0.3",
     "node-fetch": "^3.3.2"
