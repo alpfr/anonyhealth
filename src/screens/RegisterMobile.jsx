@@ -3,12 +3,14 @@ import { supabase } from "../supabaseClient";
 import { T } from "../constants/theme";
 import { MobileNav } from "../components/MobileNav";
 import { logAuditEvent } from "../utils/audit";
+import { useTenant } from "../context/TenantContext";
 
 // ═══════════════════════════════════════════════════════════
 // SCREEN: REGISTER AS PATIENT (MOBILE)
 // ═══════════════════════════════════════════════════════════
 export const RegisterMobile = ({ theme, onBack }) => {
   const t = T[theme];
+  const { tenant } = useTenant();
   const isDark = theme === "dark";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -58,10 +60,13 @@ export const RegisterMobile = ({ theme, onBack }) => {
       return;
     }
 
-    // On sign-up, store PII in separate RLS-protected table (not auth metadata)
-    if (!isLogin && data?.user) {
+    // On sign-up, store PII in separate RLS-protected table. Requires an
+    // active tenant (set via patient invite redemption) — without one the
+    // RLS insert policy will reject the row.
+    if (!isLogin && data?.user && tenant?.id) {
       const { error: profileError } = await supabase.from('patient_profiles').insert({
         id: data.user.id,
+        tenant_id: tenant.id,
         full_name: name.trim(),
         dob: dob,
         address: address.trim(),
