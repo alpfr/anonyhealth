@@ -34,20 +34,20 @@ No test suite is configured yet (Playwright is a devDep but no test files exist)
 
 ### Data Flow
 ```
-Browser → Firebase Auth → Auth Proxy (Node.js on Cloud Run) → PostgREST (PostgreSQL)
+Browser → Supabase Auth + PostgREST (hosted) → Postgres (RLS)
 Browser → Supabase Edge Function (aichat) → Anthropic Claude API (streaming SSE)
 ```
 
-- **Authentication**: Firebase Auth with auto-registration. A custom Node.js auth proxy (Cloud Run) validates Firebase JWTs and mints internal PostgreSQL role-based JWTs for PostgREST.
-- **AI Chat**: `supabase/functions/aichat/index.ts` calls Claude 3 Haiku via streaming SSE. The client (`AIChatMobile.jsx`) reads `content_block_delta` events and extracts `<metadata>` XML with severity scores.
+- **Authentication**: Supabase Auth (email+password). The client uses the session's `access_token` which PostgREST verifies natively; RLS policies use `auth.uid()`.
+- **AI Chat**: `supabase/functions/aichat/index.ts` calls Claude via streaming SSE. The client (`AIChatMobile.jsx`) reads `content_block_delta` events and extracts `<metadata>` XML with severity scores.
 - **Database Security**: All tables use PostgreSQL Row Level Security. Users can only access their own `health_logs` and `patient_profiles`.
 
 ### Key Directories
 - `src/screens/` — Each app screen as a standalone component (mobile-first)
 - `src/components/` — Shared UI (PhoneFrame, BottomNav, ProviderCard, etc.)
 - `src/constants/theme.jsx` — Light/dark color palettes, icon SVGs, all style tokens
-- `src/utils/audit.js` — SOC 2 compliance event logging
-- `src/supabaseClient.js` — Supabase + Firebase init, custom fetch wrapper that injects Firebase tokens
+- `src/utils/audit.js` — SOC 2 compliance event logging (see phase-4 plan to move server-side)
+- `src/supabaseClient.js` — Supabase client init; fails fast on missing env vars
 - `supabase/functions/aichat/` — Edge function for Claude AI triage (TypeScript)
 
 ### Styling Pattern
@@ -61,9 +61,10 @@ All components use **inline `style={}` objects** referencing theme tokens from `
 
 ## Environment Variables
 The app uses Vite env vars (prefixed `VITE_`):
-- `VITE_SUPABASE_URL` — Supabase project URL
+- `VITE_SUPABASE_URL` — Supabase project URL (e.g. `https://xxx.supabase.co`)
 - `VITE_SUPABASE_ANON_KEY` — Supabase anonymous key
-- Firebase config is hardcoded in `src/supabaseClient.js`
+
+Both are required. `src/supabaseClient.js` throws on startup if either is missing.
 
 ## Deployment
 - **Docker**: Multi-stage build (Node 22 → Nginx 1.27 Alpine, non-root UID 101, port 8080)
