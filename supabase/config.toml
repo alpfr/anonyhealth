@@ -14,3 +14,20 @@ entrypoint = "./functions/aichat/index.ts"
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/log-audit/index.ts"
+
+[functions.stripe-checkout]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/stripe-checkout/index.ts"
+
+# Stripe posts webhooks without a Supabase JWT; authenticity is proven by the
+# Stripe-Signature header and verified inside the function.
+[functions.stripe-webhook]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/stripe-webhook/index.ts"
+
+[functions.stripe-portal]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/stripe-portal/index.ts"
