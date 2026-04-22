@@ -1,15 +1,23 @@
 steps:
-  # Build the Docker image
+  # Build the Docker image. Vite env vars are pulled from Secret Manager and
+  # passed as build args so they are baked into the static bundle (they are
+  # publishable values — Supabase URL and anon key — but keeping them out of
+  # the repo means they rotate without a commit).
   - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
     args:
-      - 'build'
-      - '--platform'
-      - 'linux/amd64'
-      - '-t'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth:$BUILD_ID'
-      - '-t'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth:latest'
-      - '.'
+      - '-c'
+      - |
+        docker build \
+          --platform linux/amd64 \
+          --build-arg VITE_SUPABASE_URL="$$VITE_SUPABASE_URL" \
+          --build-arg VITE_SUPABASE_ANON_KEY="$$VITE_SUPABASE_ANON_KEY" \
+          -t us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth:$BUILD_ID \
+          -t us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth:latest \
+          .
+    secretEnv:
+      - VITE_SUPABASE_URL
+      - VITE_SUPABASE_ANON_KEY
 
   # Push the image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
@@ -45,6 +53,13 @@ steps:
     env:
       - 'CLOUDSDK_COMPUTE_ZONE=us-central1-a'
       - 'CLOUDSDK_CONTAINER_CLUSTER=opssightai-cluster'
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/VITE_SUPABASE_URL/versions/latest
+      env: VITE_SUPABASE_URL
+    - versionName: projects/$PROJECT_ID/secrets/VITE_SUPABASE_ANON_KEY/versions/latest
+      env: VITE_SUPABASE_ANON_KEY
 
 options:
   logging: CLOUD_LOGGING_ONLY
