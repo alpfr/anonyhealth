@@ -16,6 +16,7 @@ const ALLOWED_EVENT_TYPES = new Set([
     "profile.update",
     "health_log.create",
     "settings.change",
+    "phi.read",
 ]);
 
 const MAX_DETAIL_LENGTH = 512;

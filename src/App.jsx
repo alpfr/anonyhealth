@@ -31,6 +31,8 @@ const AboutMobile = lazy(() => import("./screens/AboutMobile").then(m => ({ defa
 const DoctorOnboardingMobile = lazy(() => import("./screens/DoctorOnboardingMobile").then(m => ({ default: m.DoctorOnboardingMobile })));
 const BillingInactiveMobile = lazy(() => import("./screens/BillingInactiveMobile").then(m => ({ default: m.BillingInactiveMobile })));
 const AcceptInviteMobile = lazy(() => import("./screens/AcceptInviteMobile").then(m => ({ default: m.AcceptInviteMobile })));
+const DoctorDashboardMobile = lazy(() => import("./screens/DoctorDashboardMobile").then(m => ({ default: m.DoctorDashboardMobile })));
+const PatientDetailMobile = lazy(() => import("./screens/PatientDetailMobile").then(m => ({ default: m.PatientDetailMobile })));
 
 // Loading fallback for lazy components
 const ScreenLoader = ({ theme }) => {
@@ -302,8 +304,51 @@ const TenantGate = ({ children }) => {
     );
   }
 
+  if (isDoctor) {
+    return (
+      <Suspense fallback={<ScreenLoader theme={theme} />}>
+        <DoctorApp />
+      </Suspense>
+    );
+  }
+
   return children;
 };
+
+function DoctorApp() {
+  const { theme } = useTheme();
+  const { session } = useAuth();
+  const [screen, setScreen] = useState({ name: "home" });
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: T[theme].bg }}>
+      <Suspense fallback={<ScreenLoader theme={theme} />}>
+        {screen.name === "home" && (
+          <DoctorDashboardMobile
+            theme={theme}
+            onOpenPatient={(id) => setScreen({ name: "patient", patientUserId: id })}
+            onOpenSettings={() => setScreen({ name: "settings" })}
+          />
+        )}
+        {screen.name === "patient" && (
+          <PatientDetailMobile
+            theme={theme}
+            patientUserId={screen.patientUserId}
+            onBack={() => setScreen({ name: "home" })}
+          />
+        )}
+        {screen.name === "settings" && (
+          <SettingsMobile
+            theme={theme}
+            onBack={() => setScreen({ name: "home" })}
+            session={session}
+            onNavigate={() => setScreen({ name: "home" })}
+          />
+        )}
+      </Suspense>
+    </div>
+  );
+}
 
 function InviteRoute({ token }) {
   const { theme } = useTheme();
