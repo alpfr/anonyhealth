@@ -1,146 +1,161 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+// AI triage edge function.
+// Requires `verify_jwt = true` in supabase/config.toml — the Supabase platform
+// rejects unauthenticated requests before this function is invoked, so we can
+// trust the JWT `sub` claim for the user identity.
 
-const ALLOWED_ORIGINS = [
-    'https://anonyhealth.opssightai.com',
-    'http://localhost:5173',
-    'http://localhost:8080',
-]
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const MAX_MESSAGE_LENGTH = 2000
+const MAX_MESSAGE_LENGTH = 2000;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const MAX_REQUESTS_PER_WINDOW = 5;
+const ANTHROPIC_MODEL = "claude-haiku-4-5-20251001";
 
-function getCorsHeaders(req: Request) {
-    const origin = req.headers.get('origin') || ''
-    const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
-    return {
-        'Access-Control-Allow-Origin': allowedOrigin,
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ?? "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+
+function getCorsHeaders(req: Request): Record<string, string> {
+    const origin = req.headers.get("origin") ?? "";
+    const allowed = ALLOWED_ORIGINS.includes(origin);
+    const headers: Record<string, string> = {
+        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Max-Age": "600",
+        "Vary": "Origin",
+    };
+    if (allowed) headers["Access-Control-Allow-Origin"] = origin;
+    return headers;
+}
+
+function jsonResponse(body: unknown, status: number, headers: Record<string, string>) {
+    return new Response(JSON.stringify(body), {
+        status,
+        headers: { ...headers, "Content-Type": "application/json" },
+    });
+}
+
+function getUserIdFromJwt(req: Request): string | null {
+    const auth = req.headers.get("authorization") ?? "";
+    if (!auth.startsWith("Bearer ")) return null;
+    const token = auth.slice(7);
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    try {
+        const payload = JSON.parse(
+            new TextDecoder().decode(
+                Uint8Array.from(
+                    atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")),
+                    (c) => c.charCodeAt(0),
+                ),
+            ),
+        );
+        return typeof payload.sub === "string" ? payload.sub : null;
+    } catch {
+        return null;
     }
 }
 
-// Simple in-memory rate limiting (per Edge Function instance)
-const rateLimitMap = new Map<string, { count: number, resetAt: number }>();
-const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
-const MAX_REQUESTS_PER_WINDOW = 5;
-
-function isRateLimited(ip: string): boolean {
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+function isRateLimited(key: string): boolean {
     const now = Date.now();
-    const record = rateLimitMap.get(ip);
-    
-    if (!record) {
-        rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    const record = rateLimitMap.get(key);
+    if (!record || now > record.resetAt) {
+        rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
         return false;
     }
-    
-    if (now > record.resetAt) {
-        rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-        return false;
-    }
-    
-    if (record.count >= MAX_REQUESTS_PER_WINDOW) {
-        return true;
-    }
-    
+    if (record.count >= MAX_REQUESTS_PER_WINDOW) return true;
     record.count++;
     return false;
 }
 
 serve(async (req) => {
-    const corsHeaders = getCorsHeaders(req)
+    const corsHeaders = getCorsHeaders(req);
 
-    if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders })
+    if (req.method === "OPTIONS") {
+        return new Response(null, { status: 204, headers: corsHeaders });
+    }
+    if (req.method !== "POST") {
+        return jsonResponse({ error: "Method not allowed" }, 405, corsHeaders);
     }
 
-    // Only allow POST
-    if (req.method !== 'POST') {
-        return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-            status: 405,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+    const origin = req.headers.get("origin") ?? "";
+    if (ALLOWED_ORIGINS.length > 0 && origin && !ALLOWED_ORIGINS.includes(origin)) {
+        return jsonResponse({ error: "Origin not allowed" }, 403, corsHeaders);
     }
 
+    const userId = getUserIdFromJwt(req);
+    if (!userId) {
+        return jsonResponse({ error: "Unauthorized" }, 401, corsHeaders);
+    }
+
+    if (isRateLimited(userId)) {
+        return jsonResponse(
+            { error: "Too many requests. Please wait a minute before sending another message." },
+            429,
+            corsHeaders,
+        );
+    }
+
+    let message: unknown;
     try {
-        const { message } = await req.json()
+        const body = await req.json();
+        message = body?.message;
+    } catch {
+        return jsonResponse({ error: "Invalid JSON body" }, 400, corsHeaders);
+    }
 
-        // 1. IP Rate Limiting Check
-        const clientIp = req.headers.get('x-forwarded-for') || 'unknown';
-        if (isRateLimited(clientIp)) {
-            return new Response(JSON.stringify({ error: 'Too many requests. Please wait a minute before sending another message.' }), {
-                status: 429,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            })
-        }
+    if (typeof message !== "string" || message.trim().length === 0) {
+        return jsonResponse({ error: "Message is required and must be a non-empty string" }, 400, corsHeaders);
+    }
+    if (message.length > MAX_MESSAGE_LENGTH) {
+        return jsonResponse(
+            { error: `Message exceeds maximum length of ${MAX_MESSAGE_LENGTH} characters` },
+            400,
+            corsHeaders,
+        );
+    }
 
-        // 2. Input validation
-        if (!message || typeof message !== 'string') {
-            return new Response(JSON.stringify({ error: 'Message is required and must be a string' }), {
-                status: 400,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            })
-        }
+    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!apiKey) {
+        console.error("ANTHROPIC_API_KEY is not set");
+        return jsonResponse({ error: "AI service is temporarily unavailable" }, 503, corsHeaders);
+    }
 
-        if (message.length > MAX_MESSAGE_LENGTH) {
-            return new Response(JSON.stringify({ error: `Message exceeds maximum length of ${MAX_MESSAGE_LENGTH} characters` }), {
-                status: 400,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            })
-        }
-
-        const sanitizedMessage = message.trim()
-
-        const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
-
-        if (!apiKey) {
-            // Don't expose internal config details in error
-            console.error('ANTHROPIC_API_KEY is not set')
-            throw new Error('AI service is temporarily unavailable')
-        }
-
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-                'x-api-key': apiKey,
-                'anthropic-version': '2023-06-01',
-                'content-type': 'application/json',
-            },
-            body: JSON.stringify({
-                model: 'claude-3-haiku-20240307',
-                max_tokens: 1024,
-                stream: true,
-                system: `You are a helpful and empathetic medical triage assistant for AnonyHealth. You are NOT a doctor. Listen to the user symptoms.
-IMPORTANT: You must structure your response in two parts. 
+    const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+        body: JSON.stringify({
+            model: ANTHROPIC_MODEL,
+            max_tokens: 1024,
+            stream: true,
+            system: `You are a helpful and empathetic medical triage assistant for AnonyHealth. You are NOT a doctor. Listen to the user symptoms.
+IMPORTANT: You must structure your response in two parts.
 Part 1: Your concise advice to the user.
 Part 2: You MUST end your response with an XML tag <metadata> containing JSON with {"severity": 1-10, "symptom": "short summary"}.
 Example:
 You should rest and drink water.
 <metadata>{"severity": 2, "symptom": "Sore throat"}</metadata>`,
-                messages: [
-                    { role: 'user', content: sanitizedMessage }
-                ],
-            }),
-        })
+            messages: [{ role: "user", content: message.trim() }],
+        }),
+    });
 
-        if (!response.ok) {
-            const err = await response.text();
-            throw new Error(`Anthropic error: ${err}`);
-        }
-
-        return new Response(response.body, {
-            headers: {
-                ...corsHeaders,
-                'Content-Type': 'text/event-stream',
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-            },
-        })
-    } catch (error) {
-        // Don't leak internal error details to client
-        const clientMessage = error.message;
-
-        return new Response(JSON.stringify({ error: clientMessage }), {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+    if (!anthropicResponse.ok) {
+        const detail = await anthropicResponse.text().catch(() => "");
+        console.error("Anthropic upstream error:", anthropicResponse.status, detail);
+        return jsonResponse({ error: "AI service request failed" }, 502, corsHeaders);
     }
-})
+
+    return new Response(anthropicResponse.body, {
+        headers: {
+            ...corsHeaders,
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        },
+    });
+});
