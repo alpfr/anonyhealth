@@ -96,18 +96,52 @@ alter table health_logs enable row level security;
 create policy "Users can view own logs" on health_logs for select using (auth.uid() = user_id);
 create policy "Users can insert own logs" on health_logs for insert with check (auth.uid() = user_id);
 
--- 4. Audit Logs (SOC 2 compliance)
+-- 4. Audit Logs (SOC 2 / HIPAA compliance) — append-only, server-written only.
+-- Clients must NOT insert directly; the `log-audit` Edge Function writes via
+-- the service role. This prevents users tainting their own audit trail.
 create table audit_logs (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references auth.users,
-  event_type text not null,
+  event_type text not null check (event_type in (
+    'auth.sign_in',
+    'auth.sign_up',
+    'auth.sign_out',
+    'profile.update',
+    'health_log.create',
+    'settings.change',
+    'system.signup_trigger'
+  )),
   detail text,
+  ip text,
+  user_agent text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
 alter table audit_logs enable row level security;
 create policy "Users can view own audit logs" on audit_logs for select using (auth.uid() = user_id);
-create policy "Authenticated users can insert audit logs" on audit_logs for insert with check (auth.uid() = user_id);
+
+-- Explicitly revoke write privileges from client-facing roles.
+revoke insert, update, delete on audit_logs from authenticated, anon;
+grant select on audit_logs to authenticated;
+
+-- Defense-in-depth: log every auth.users insert even if the client never
+-- reports a sign_up event.
+create or replace function public.log_signup_audit()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.audit_logs (user_id, event_type, detail)
+  values (new.id, 'system.signup_trigger', 'auth.users row inserted');
+  return new;
+end;
+$$;
+
+create trigger on_auth_user_created_audit
+  after insert on auth.users
+  for each row execute function public.log_signup_audit();
 
 -- Enable Row Level Security (optional, for read access)
 alter table providers enable row level security;

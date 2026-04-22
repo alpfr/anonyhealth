@@ -63,15 +63,16 @@ export const AIChatMobile = ({ theme, initialMsg, onBack, onBook }) => {
 
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
       const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token || anonKey;
+      if (!session?.access_token) {
+        throw new Error("Please sign in to use AI chat.");
+      }
 
       const res = await fetch(`${supabaseUrl}/functions/v1/aichat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
+          "Authorization": `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({ message: textToSend }),
         signal: controller.signal,
@@ -79,6 +80,7 @@ export const AIChatMobile = ({ theme, initialMsg, onBack, onBook }) => {
 
       if (!res.ok) {
         const status = res.status;
+        if (status === 401) throw new Error("Your session has expired. Please sign in again.");
         if (status === 429) throw new Error("Too many requests. Please wait a moment and try again.");
         if (status >= 500) throw new Error("AI service is temporarily unavailable. Please try again later.");
         throw new Error("Failed to connect to AI service.");

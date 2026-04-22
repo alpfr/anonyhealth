@@ -7,7 +7,6 @@ import { MobileNav } from "../components/MobileNav";
 // ═══════════════════════════════════════════════════════════
 export const PatientDashboard = ({ theme, onNavigate }) => {
   const t = T[theme];
-  const isDark = theme === "dark";
   const [activityInput, setActivityInput] = useState("");
 
   const handleActivitySubmit = (e) => {

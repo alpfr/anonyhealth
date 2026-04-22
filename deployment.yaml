@@ -34,12 +34,18 @@ spec:
         labelSelector:
           matchLabels:
             app: anonyhealth
+      volumes:
+      - name: nginx-tmp
+        emptyDir: {}
       containers:
       - name: anonyhealth
         image: us-central1-docker.pkg.dev/alpfr-splunk-integration/healthcare-repo/anonyhealth:latest
         ports:
         - containerPort: 8080
           protocol: TCP
+        volumeMounts:
+        - name: nginx-tmp
+          mountPath: /tmp/nginx
         resources:
           requests:
             memory: "128Mi"
@@ -72,7 +78,9 @@ spec:
           failureThreshold: 10
         securityContext:
           allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 101
           capabilities:
             drop:
               - ALL

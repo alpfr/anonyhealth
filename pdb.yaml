@@ -6,6 +6,9 @@ metadata:
     app: anonyhealth
 spec:
   minAvailable: 1
+  # Allow unhealthy pods to be evicted during node drains even if they breach
+  # the PDB — prevents stuck-unhealthy pods from blocking cluster maintenance.
+  unhealthyPodEvictionPolicy: AlwaysAllow
   selector:
     matchLabels:
       app: anonyhealth

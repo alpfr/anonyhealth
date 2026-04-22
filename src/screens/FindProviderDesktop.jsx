@@ -9,7 +9,6 @@ import { ProviderCard } from "../components/ProviderCard";
 // ═══════════════════════════════════════════════════════════
 export const FindProviderDesktop = ({ theme, onSelectProvider, providers = PROVIDERS }) => {
   const t = T[theme];
-  const isDark = theme === "dark";
   const [vis, setVis] = useState(false);
   useEffect(() => { setTimeout(() => setVis(true), 80); }, []);
 
