@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 
 import { useAuth } from "./context/AuthContext";
 import { useTheme } from "./context/ThemeContext";
+import { useTenant } from "./context/TenantContext";
 import { supabase } from "./supabaseClient";
 import { fetchProviders as fetchProvidersService } from "./services/providers";
 import { logAuditEvent } from "./utils/audit";
@@ -27,6 +28,9 @@ const SettingsMobile = lazy(() => import("./screens/SettingsMobile").then(m => (
 const HistoryMobile = lazy(() => import("./screens/HistoryMobile").then(m => ({ default: m.HistoryMobile })));
 const FindProviderMobile = lazy(() => import("./screens/FindProviderMobile").then(m => ({ default: m.FindProviderMobile })));
 const AboutMobile = lazy(() => import("./screens/AboutMobile").then(m => ({ default: m.AboutMobile })));
+const DoctorOnboardingMobile = lazy(() => import("./screens/DoctorOnboardingMobile").then(m => ({ default: m.DoctorOnboardingMobile })));
+const BillingInactiveMobile = lazy(() => import("./screens/BillingInactiveMobile").then(m => ({ default: m.BillingInactiveMobile })));
+const AcceptInviteMobile = lazy(() => import("./screens/AcceptInviteMobile").then(m => ({ default: m.AcceptInviteMobile })));
 
 // Loading fallback for lazy components
 const ScreenLoader = ({ theme }) => {
@@ -234,10 +238,96 @@ const AuthGate = ({ children }) => {
   );
 };
 
+// ═══════════════════════════════════════════════════════════
+// TENANT GATE — routes based on membership / subscription / URL
+// ═══════════════════════════════════════════════════════════
+function parseRoute() {
+  const path = window.location.pathname;
+  const inviteMatch = path.match(/^\/invite\/([A-Za-z0-9_-]{16,128})\/?$/);
+  if (inviteMatch) return { kind: "invite", token: inviteMatch[1] };
+  if (path.startsWith("/billing/success")) return { kind: "billing_success" };
+  if (path.startsWith("/billing/cancel"))  return { kind: "billing_cancel" };
+  return { kind: "app" };
+}
+
+const TenantGate = ({ children }) => {
+  const { theme } = useTheme();
+  const { loading, membership, subscription, isDoctor, hasActiveSubscription, refresh } = useTenant();
+  const [route] = useState(parseRoute);
+  const [postCheckout, setPostCheckout] = useState(route.kind === "billing_success");
+
+  // After Stripe redirects back, poll for a live subscription row (webhook race).
+  useEffect(() => {
+    if (!postCheckout) return;
+    if (hasActiveSubscription) {
+      window.history.replaceState(null, "", "/");
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPostCheckout(false);
+      return;
+    }
+    let tries = 0;
+    const id = setInterval(async () => {
+      tries += 1;
+      await refresh();
+      if (tries >= 10) {
+        clearInterval(id);
+        window.history.replaceState(null, "", "/");
+        setPostCheckout(false);
+      }
+    }, 1500);
+    return () => clearInterval(id);
+  }, [postCheckout, hasActiveSubscription, refresh]);
+
+  if (loading) {
+    return <ScreenLoader theme={theme} />;
+  }
+
+  if (postCheckout) {
+    return <ScreenLoader theme={theme} />;
+  }
+
+  // Doctor path: no tenant yet → onboarding; tenant but subscription inactive → billing screen.
+  if (!membership) {
+    return (
+      <Suspense fallback={<ScreenLoader theme={theme} />}>
+        <DoctorOnboardingMobile theme={theme} />
+      </Suspense>
+    );
+  }
+  if (isDoctor && !hasActiveSubscription) {
+    return (
+      <Suspense fallback={<ScreenLoader theme={theme} />}>
+        <BillingInactiveMobile theme={theme} subscription={subscription} onRefresh={refresh} />
+      </Suspense>
+    );
+  }
+
+  return children;
+};
+
+function InviteRoute({ token }) {
+  const { theme } = useTheme();
+  return (
+    <Suspense fallback={<ScreenLoader theme={theme} />}>
+      <AcceptInviteMobile theme={theme} token={token}
+        onJoined={() => { window.history.replaceState(null, "", "/"); window.location.reload(); }} />
+    </Suspense>
+  );
+}
+
 export default function AnonyHealthApp() {
+  const [route] = useState(parseRoute);
+
+  if (route.kind === "invite") {
+    // Invite URL bypasses the normal gates so a patient can sign up to accept.
+    return <InviteRoute token={route.token} />;
+  }
+
   return (
     <AuthGate>
-      <AnonyHealthAppContent />
+      <TenantGate>
+        <AnonyHealthAppContent />
+      </TenantGate>
     </AuthGate>
   );
 }

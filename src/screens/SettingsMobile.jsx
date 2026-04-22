@@ -4,6 +4,8 @@ import { T, Icons } from "../constants/theme";
 import { MobileNav } from "../components/MobileNav";
 import { Toggle } from "../components/Toggle";
 import { logAuditEvent } from "../utils/audit";
+import { useTenant } from "../context/TenantContext";
+import { callFunction } from "../utils/functions";
 
 // ═══════════════════════════════════════════════════════════
 // SCREEN: SETTINGS (MOBILE)
@@ -29,15 +31,27 @@ const SettingsRow = ({ icon, label, desc, right, border = true, t }) => (
 
 export const SettingsMobile = ({ theme, onBack, session, onNavigate }) => {
   const t = T[theme];
+  const { isDoctor } = useTenant();
   const [notifs, setNotifs] = useState(true);
   const [updates, setUpdates] = useState(false);
   const [anon, setAnon] = useState(true);
-
+  const [billingBusy, setBillingBusy] = useState(false);
 
   const handleSignOut = async () => {
     await logAuditEvent("auth.sign_out", "User signed out");
     await supabase.auth.signOut();
     onBack();
+  };
+
+  const openBillingPortal = async () => {
+    setBillingBusy(true);
+    try {
+      const { url } = await callFunction("stripe-portal", {});
+      window.location.href = url;
+    } catch (e) {
+      alert(e.message || "Unable to open billing portal");
+      setBillingBusy(false);
+    }
   };
 
   return (
@@ -63,6 +77,18 @@ export const SettingsMobile = ({ theme, onBack, session, onNavigate }) => {
           {session ? (
             <>
               <SettingsRow t={t} icon={Icons.mail(t.accent)} label="Email" desc={session.user.email} right={Icons.chevRight(t.textMut)} />
+              {isDoctor && (
+                <div onClick={openBillingPortal} style={{ padding: "16px 0", borderTop: `1px solid ${t.border}`, cursor: billingBusy ? "wait" : "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", opacity: billingBusy ? 0.6 : 1 }}>
+                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: t.chipBg, display: "flex", alignItems: "center", justifyContent: "center" }}>{Icons.shield(t.accent, 16)}</div>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: t.text, fontFamily: "'Outfit', sans-serif" }}>Manage billing</div>
+                      <div style={{ fontSize: 12, color: t.textMut, fontFamily: "'Outfit', sans-serif", marginTop: 1 }}>Update card, cancel, or view invoices</div>
+                    </div>
+                  </div>
+                  {Icons.chevRight(t.textMut)}
+                </div>
+              )}
               <button onClick={handleSignOut} style={{
                 width: "100%", padding: "16px 0", border: "none", background: "none", cursor: "pointer",
                 borderTop: `1px solid ${t.border}`, color: t.danger, fontSize: 14, fontWeight: 600, fontFamily: "'Outfit', sans-serif",
