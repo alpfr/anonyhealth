@@ -1,6 +1,6 @@
 import { T, Icons } from "../constants/theme";
 
-export const MobileNav = ({ theme, title, onBack, rightAction }) => {
+export const MobileNav = ({ theme, onBack, rightAction }) => {
   const t = T[theme];
   return (
     <div style={{

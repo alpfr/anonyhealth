@@ -24,6 +24,18 @@ export default defineConfig([
     },
     rules: {
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-eval': 'error',
+      'no-implied-eval': 'error',
+      'no-new-func': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
+    },
+  },
+  {
+    // theme.jsx exports both theme tokens and icon components by design.
+    // Splitting would touch 17 call sites; Fast Refresh is not used on these.
+    files: ['src/constants/**/*.{js,jsx}'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
     },
   },
 ])
