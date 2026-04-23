@@ -1,15 +1,18 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useTenant } from "../context/TenantContext";
 import { T } from "../constants/theme";
 import { callFunction } from "../utils/functions";
 
 export const BillingInactiveMobile = ({ theme, subscription, onRefresh }) => {
   const t = T[theme];
   const { signOut } = useAuth();
+  const { tenant } = useTenant();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const status = subscription?.status ?? "none";
+  const hasStripeCustomer = !!subscription?.stripe_customer_id;
 
   const openPortal = async () => {
     setBusy(true);
@@ -22,6 +25,28 @@ export const BillingInactiveMobile = ({ theme, subscription, onRefresh }) => {
       setBusy(false);
     }
   };
+
+  const startCheckout = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const { url } = await callFunction("stripe-checkout", {
+        practice_name: tenant?.name || "My practice",
+      });
+      if (!url) throw new Error("Checkout URL missing");
+      window.location.href = url;
+    } catch (e) {
+      setError(e.message || "Unable to start checkout.");
+      setBusy(false);
+    }
+  };
+
+  // If a Stripe customer already exists, the doctor's subscription is
+  // recoverable via the billing portal. If not (e.g., they bailed out of
+  // the initial checkout), the only way forward is to re-run checkout.
+  const primaryAction = hasStripeCustomer
+    ? { label: "Manage billing", handler: openPortal }
+    : { label: "Start 14-day free trial", handler: startCheckout };
 
   const copy = {
     canceled: {
@@ -40,10 +65,15 @@ export const BillingInactiveMobile = ({ theme, subscription, onRefresh }) => {
       title: "Subscription paused",
       body: "Resume billing to regain access to your patients and logs.",
     },
-  }[status] || {
-    title: "Subscription inactive",
-    body: "Your subscription is not active. Reactivate in the billing portal to continue.",
-  };
+  }[status] || (hasStripeCustomer
+    ? {
+        title: "Subscription inactive",
+        body: "Your subscription is not active. Reactivate in the billing portal to continue.",
+      }
+    : {
+        title: "Start your subscription",
+        body: "Complete a 14-day free trial to activate your practice. No charge until the trial ends.",
+      });
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "32px 24px", background: t.bg, color: t.text, fontFamily: "'Outfit', sans-serif" }}>
@@ -53,7 +83,7 @@ export const BillingInactiveMobile = ({ theme, subscription, onRefresh }) => {
       {error && <div style={{ marginTop: 12, color: "#dc2626", fontSize: 13 }}>{error}</div>}
 
       <button
-        onClick={openPortal}
+        onClick={primaryAction.handler}
         disabled={busy}
         style={{
           marginTop: 24, padding: "14px 16px", borderRadius: 12, border: "none",
@@ -61,7 +91,7 @@ export const BillingInactiveMobile = ({ theme, subscription, onRefresh }) => {
           cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1,
         }}
       >
-        {busy ? "Opening..." : "Manage billing"}
+        {busy ? "Opening..." : primaryAction.label}
       </button>
 
       <button
