@@ -167,16 +167,21 @@ const AuthGate = ({ children }) => {
         <h2 style={{ fontSize: 20, fontWeight: 700, color: "#0f172a", marginBottom: 20 }}>AnonyHealth</h2>
 
         {mode !== "verify" && (
-          <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: "1px solid #e2e8f0" }}>
-            <button type="button" onClick={() => { setMode("signin"); resetMessages(); }}
-              style={{ flex: 1, padding: "10px", background: "none", border: "none", cursor: "pointer", fontSize: 14, ...(mode === "signin" ? activeTabStyle : inactiveTabStyle) }}>
-              Sign In
-            </button>
-            <button type="button" onClick={() => { setMode("signup"); resetMessages(); }}
-              style={{ flex: 1, padding: "10px", background: "none", border: "none", cursor: "pointer", fontSize: 14, ...(mode === "signup" ? activeTabStyle : inactiveTabStyle) }}>
-              Create account
-            </button>
-          </div>
+          <>
+            <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16, textAlign: "center", lineHeight: 1.5 }}>
+              For healthcare providers. Patients join through an invite link from their provider.
+            </p>
+            <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: "1px solid #e2e8f0" }}>
+              <button type="button" onClick={() => { setMode("signin"); resetMessages(); }}
+                style={{ flex: 1, padding: "10px", background: "none", border: "none", cursor: "pointer", fontSize: 14, ...(mode === "signin" ? activeTabStyle : inactiveTabStyle) }}>
+                Provider sign in
+              </button>
+              <button type="button" onClick={() => { setMode("signup"); resetMessages(); }}
+                style={{ flex: 1, padding: "10px", background: "none", border: "none", cursor: "pointer", fontSize: 14, ...(mode === "signup" ? activeTabStyle : inactiveTabStyle) }}>
+                Sign up as provider
+              </button>
+            </div>
+          </>
         )}
 
         {mode === "verify" ? (
@@ -231,8 +236,12 @@ const AuthGate = ({ children }) => {
               disabled={submitting} style={primaryBtn(submitting)}>
               {submitting
                 ? (mode === "signin" ? "Signing in..." : "Creating account...")
-                : (mode === "signin" ? "Sign In" : "Create account")}
+                : (mode === "signin" ? "Sign In" : "Create provider account")}
             </button>
+
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #e2e8f0", fontSize: 12, color: "#64748b" }}>
+              Patient with an invite? Open the link your provider sent you.
+            </div>
           </>
         )}
       </div>

@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { T } from "../constants/theme";
 import { callFunction } from "../utils/functions";
+import { useAuth } from "../context/AuthContext";
 
 export const DoctorOnboardingMobile = ({ theme }) => {
   const t = T[theme];
+  const { signOut, user } = useAuth();
   const [practiceName, setPracticeName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -65,6 +67,16 @@ export const DoctorOnboardingMobile = ({ theme }) => {
         Your billing is managed by Stripe. No patient health data is ever shared with Stripe —
         only your email and a tenant identifier.
       </p>
+
+      <div style={{ marginTop: "auto", paddingTop: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: 12, color: t.textMut }}>{user?.email}</span>
+        <button
+          onClick={signOut}
+          style={{ background: "none", border: "none", color: t.textMut, fontSize: 13, cursor: "pointer", padding: 4 }}
+        >
+          Sign out
+        </button>
+      </div>
     </div>
   );
 };
