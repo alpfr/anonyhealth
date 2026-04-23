@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 
 import { useAuth } from "./context/AuthContext";
 import { useTheme } from "./context/ThemeContext";
+import { useTenant } from "./context/TenantContext";
 import { supabase } from "./supabaseClient";
 import { fetchProviders as fetchProvidersService } from "./services/providers";
 import { logAuditEvent } from "./utils/audit";
@@ -27,6 +28,11 @@ const SettingsMobile = lazy(() => import("./screens/SettingsMobile").then(m => (
 const HistoryMobile = lazy(() => import("./screens/HistoryMobile").then(m => ({ default: m.HistoryMobile })));
 const FindProviderMobile = lazy(() => import("./screens/FindProviderMobile").then(m => ({ default: m.FindProviderMobile })));
 const AboutMobile = lazy(() => import("./screens/AboutMobile").then(m => ({ default: m.AboutMobile })));
+const DoctorOnboardingMobile = lazy(() => import("./screens/DoctorOnboardingMobile").then(m => ({ default: m.DoctorOnboardingMobile })));
+const BillingInactiveMobile = lazy(() => import("./screens/BillingInactiveMobile").then(m => ({ default: m.BillingInactiveMobile })));
+const AcceptInviteMobile = lazy(() => import("./screens/AcceptInviteMobile").then(m => ({ default: m.AcceptInviteMobile })));
+const DoctorDashboardMobile = lazy(() => import("./screens/DoctorDashboardMobile").then(m => ({ default: m.DoctorDashboardMobile })));
+const PatientDetailMobile = lazy(() => import("./screens/PatientDetailMobile").then(m => ({ default: m.PatientDetailMobile })));
 
 // Loading fallback for lazy components
 const ScreenLoader = ({ theme }) => {
@@ -161,16 +167,21 @@ const AuthGate = ({ children }) => {
         <h2 style={{ fontSize: 20, fontWeight: 700, color: "#0f172a", marginBottom: 20 }}>AnonyHealth</h2>
 
         {mode !== "verify" && (
-          <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: "1px solid #e2e8f0" }}>
-            <button type="button" onClick={() => { setMode("signin"); resetMessages(); }}
-              style={{ flex: 1, padding: "10px", background: "none", border: "none", cursor: "pointer", fontSize: 14, ...(mode === "signin" ? activeTabStyle : inactiveTabStyle) }}>
-              Sign In
-            </button>
-            <button type="button" onClick={() => { setMode("signup"); resetMessages(); }}
-              style={{ flex: 1, padding: "10px", background: "none", border: "none", cursor: "pointer", fontSize: 14, ...(mode === "signup" ? activeTabStyle : inactiveTabStyle) }}>
-              Create account
-            </button>
-          </div>
+          <>
+            <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16, textAlign: "center", lineHeight: 1.5 }}>
+              For healthcare providers. Patients join through an invite link from their provider.
+            </p>
+            <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: "1px solid #e2e8f0" }}>
+              <button type="button" onClick={() => { setMode("signin"); resetMessages(); }}
+                style={{ flex: 1, padding: "10px", background: "none", border: "none", cursor: "pointer", fontSize: 14, ...(mode === "signin" ? activeTabStyle : inactiveTabStyle) }}>
+                Provider sign in
+              </button>
+              <button type="button" onClick={() => { setMode("signup"); resetMessages(); }}
+                style={{ flex: 1, padding: "10px", background: "none", border: "none", cursor: "pointer", fontSize: 14, ...(mode === "signup" ? activeTabStyle : inactiveTabStyle) }}>
+                Sign up as provider
+              </button>
+            </div>
+          </>
         )}
 
         {mode === "verify" ? (
@@ -225,8 +236,12 @@ const AuthGate = ({ children }) => {
               disabled={submitting} style={primaryBtn(submitting)}>
               {submitting
                 ? (mode === "signin" ? "Signing in..." : "Creating account...")
-                : (mode === "signin" ? "Sign In" : "Create account")}
+                : (mode === "signin" ? "Sign In" : "Create provider account")}
             </button>
+
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #e2e8f0", fontSize: 12, color: "#64748b" }}>
+              Patient with an invite? Open the link your provider sent you.
+            </div>
           </>
         )}
       </div>
@@ -234,10 +249,139 @@ const AuthGate = ({ children }) => {
   );
 };
 
+// ═══════════════════════════════════════════════════════════
+// TENANT GATE — routes based on membership / subscription / URL
+// ═══════════════════════════════════════════════════════════
+function parseRoute() {
+  const path = window.location.pathname;
+  const inviteMatch = path.match(/^\/invite\/([A-Za-z0-9_-]{16,128})\/?$/);
+  if (inviteMatch) return { kind: "invite", token: inviteMatch[1] };
+  if (path.startsWith("/billing/success")) return { kind: "billing_success" };
+  if (path.startsWith("/billing/cancel"))  return { kind: "billing_cancel" };
+  return { kind: "app" };
+}
+
+const TenantGate = ({ children }) => {
+  const { theme } = useTheme();
+  const { loading, membership, subscription, isDoctor, hasActiveSubscription, refresh } = useTenant();
+  const [route] = useState(parseRoute);
+  const [postCheckout, setPostCheckout] = useState(route.kind === "billing_success");
+
+  // After Stripe redirects back, poll for a live subscription row (webhook race).
+  useEffect(() => {
+    if (!postCheckout) return;
+    if (hasActiveSubscription) {
+      window.history.replaceState(null, "", "/");
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPostCheckout(false);
+      return;
+    }
+    let tries = 0;
+    const id = setInterval(async () => {
+      tries += 1;
+      await refresh();
+      if (tries >= 10) {
+        clearInterval(id);
+        window.history.replaceState(null, "", "/");
+        setPostCheckout(false);
+      }
+    }, 1500);
+    return () => clearInterval(id);
+  }, [postCheckout, hasActiveSubscription, refresh]);
+
+  if (loading) {
+    return <ScreenLoader theme={theme} />;
+  }
+
+  if (postCheckout) {
+    return <ScreenLoader theme={theme} />;
+  }
+
+  // Doctor path: no tenant yet → onboarding; tenant but subscription inactive → billing screen.
+  if (!membership) {
+    return (
+      <Suspense fallback={<ScreenLoader theme={theme} />}>
+        <DoctorOnboardingMobile theme={theme} />
+      </Suspense>
+    );
+  }
+  if (isDoctor && !hasActiveSubscription) {
+    return (
+      <Suspense fallback={<ScreenLoader theme={theme} />}>
+        <BillingInactiveMobile theme={theme} subscription={subscription} onRefresh={refresh} />
+      </Suspense>
+    );
+  }
+
+  if (isDoctor) {
+    return (
+      <Suspense fallback={<ScreenLoader theme={theme} />}>
+        <DoctorApp />
+      </Suspense>
+    );
+  }
+
+  return children;
+};
+
+function DoctorApp() {
+  const { theme } = useTheme();
+  const { session } = useAuth();
+  const [screen, setScreen] = useState({ name: "home" });
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: T[theme].bg }}>
+      <Suspense fallback={<ScreenLoader theme={theme} />}>
+        {screen.name === "home" && (
+          <DoctorDashboardMobile
+            theme={theme}
+            onOpenPatient={(id) => setScreen({ name: "patient", patientUserId: id })}
+            onOpenSettings={() => setScreen({ name: "settings" })}
+          />
+        )}
+        {screen.name === "patient" && (
+          <PatientDetailMobile
+            theme={theme}
+            patientUserId={screen.patientUserId}
+            onBack={() => setScreen({ name: "home" })}
+          />
+        )}
+        {screen.name === "settings" && (
+          <SettingsMobile
+            theme={theme}
+            onBack={() => setScreen({ name: "home" })}
+            session={session}
+            onNavigate={() => setScreen({ name: "home" })}
+          />
+        )}
+      </Suspense>
+    </div>
+  );
+}
+
+function InviteRoute({ token }) {
+  const { theme } = useTheme();
+  return (
+    <Suspense fallback={<ScreenLoader theme={theme} />}>
+      <AcceptInviteMobile theme={theme} token={token}
+        onJoined={() => { window.history.replaceState(null, "", "/"); window.location.reload(); }} />
+    </Suspense>
+  );
+}
+
 export default function AnonyHealthApp() {
+  const [route] = useState(parseRoute);
+
+  if (route.kind === "invite") {
+    // Invite URL bypasses the normal gates so a patient can sign up to accept.
+    return <InviteRoute token={route.token} />;
+  }
+
   return (
     <AuthGate>
-      <AnonyHealthAppContent />
+      <TenantGate>
+        <AnonyHealthAppContent />
+      </TenantGate>
     </AuthGate>
   );
 }

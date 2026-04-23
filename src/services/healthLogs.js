@@ -1,16 +1,15 @@
 import { supabase } from "../supabaseClient";
 
 /**
- * Insert a health log entry for the current user.
- * @param {string} userId - The user's ID
- * @param {object} logEntry - { symptom, severity, ai_advice }
+ * Insert a health log entry for the current user, scoped to their tenant.
  */
-export const insertHealthLog = async (userId, { symptom, severity, ai_advice }) => {
-  if (!userId || !severity) return { error: "Missing required fields" };
+export const insertHealthLog = async (userId, tenantId, { symptom, severity, ai_advice }) => {
+  if (!userId || !tenantId || !severity) return { error: "Missing required fields" };
 
   try {
     const { data, error } = await supabase.from("health_logs").insert({
       user_id: userId,
+      tenant_id: tenantId,
       symptom: sanitizeText(symptom || "Triage Session"),
       severity: Math.min(10, Math.max(1, parseInt(severity, 10))),
       ai_advice: sanitizeText(ai_advice || ""),

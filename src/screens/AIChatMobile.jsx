@@ -4,12 +4,14 @@ import { T, Icons } from "../constants/theme";
 import { MobileNav } from "../components/MobileNav";
 import { sanitizeChatMessage } from "../utils/validation";
 import { insertHealthLog } from "../services/healthLogs";
+import { useTenant } from "../context/TenantContext";
 
 // ═══════════════════════════════════════════════════════════
 // SCREEN: AI CHAT (MOBILE)
 // ═══════════════════════════════════════════════════════════
 export const AIChatMobile = ({ theme, initialMsg, onBack, onBook }) => {
   const t = T[theme];
+  const { tenant } = useTenant();
   const [msgs, setMsgs] = useState(initialMsg ? [{ role: "user", text: initialMsg }] : []);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
@@ -126,12 +128,12 @@ export const AIChatMobile = ({ theme, initialMsg, onBack, onBook }) => {
       }
 
       // Log to history if severity is present in the streamed metadata
-      if (fullText.includes('<metadata>') && session?.user) {
+      if (fullText.includes('<metadata>') && session?.user && tenant?.id) {
         try {
           const metaStr = fullText.split('<metadata>')[1]?.replace('</metadata>', '');
           const aiResponse = JSON.parse(metaStr);
           if (aiResponse.severity) {
-            await insertHealthLog(session.user.id, {
+            await insertHealthLog(session.user.id, tenant.id, {
               symptom: aiResponse.symptom,
               severity: aiResponse.severity,
               ai_advice: fullText.split('<metadata>')[0].trim(),
@@ -148,7 +150,7 @@ export const AIChatMobile = ({ theme, initialMsg, onBack, onBook }) => {
       setMsgs(prev => [...prev, { role: "bot", text: err.message || "I'm having trouble connecting to the AI service. Please try again in a moment." }]);
       setTyping(false);
     }
-  }, [input]);
+  }, [input, tenant?.id]);
 
   return (
     <>

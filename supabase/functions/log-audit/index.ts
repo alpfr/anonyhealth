@@ -16,6 +16,7 @@ const ALLOWED_EVENT_TYPES = new Set([
     "profile.update",
     "health_log.create",
     "settings.change",
+    "phi.read",
 ]);
 
 const MAX_DETAIL_LENGTH = 512;
@@ -116,7 +117,18 @@ serve(async (req) => {
     const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
     const userAgent = req.headers.get("user-agent")?.slice(0, 256) ?? null;
 
+    // Resolve the caller's tenant. In v1 a user has at most one tenant; if the
+    // model ever expands to multi-tenant users, the client should pass an
+    // explicit tenant_id and we'd validate membership here.
+    const { data: memberships } = await admin
+        .from("user_tenants")
+        .select("tenant_id")
+        .eq("user_id", userId)
+        .limit(1);
+    const tenantId = memberships?.[0]?.tenant_id ?? null;
+
     const { error } = await admin.from("audit_logs").insert({
+        tenant_id: tenantId,
         user_id: userId,
         event_type,
         detail: safeDetail,
