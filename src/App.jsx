@@ -36,6 +36,7 @@ const DoctorDashboardMobile = lazy(() => import("./screens/DoctorDashboardMobile
 const PatientDetailMobile = lazy(() => import("./screens/PatientDetailMobile").then(m => ({ default: m.PatientDetailMobile })));
 const MessagesMobile = lazy(() => import("./screens/MessagesMobile").then(m => ({ default: m.MessagesMobile })));
 const ProviderProfileMobile = lazy(() => import("./screens/ProviderProfileMobile").then(m => ({ default: m.ProviderProfileMobile })));
+const LegalPage = lazy(() => import("./screens/LegalPage").then(m => ({ default: m.LegalPage })));
 
 // Loading fallback for lazy components
 const ScreenLoader = ({ theme }) => {
@@ -247,6 +248,14 @@ const AuthGate = ({ children }) => {
             </div>
           </>
         )}
+
+        <div style={{ marginTop: 18, fontSize: 11, color: "#94a3b8", display: "flex", gap: 12, justifyContent: "center" }}>
+          <a href="/terms" style={{ color: "#94a3b8", textDecoration: "none" }}>Terms</a>
+          <span>·</span>
+          <a href="/privacy" style={{ color: "#94a3b8", textDecoration: "none" }}>Privacy</a>
+          <span>·</span>
+          <a href="/hipaa" style={{ color: "#94a3b8", textDecoration: "none" }}>HIPAA</a>
+        </div>
       </div>
     </div>
   );
@@ -261,6 +270,9 @@ function parseRoute() {
   if (inviteMatch) return { kind: "invite", token: inviteMatch[1] };
   if (path.startsWith("/billing/success")) return { kind: "billing_success" };
   if (path.startsWith("/billing/cancel"))  return { kind: "billing_cancel" };
+  if (path === "/terms")   return { kind: "legal", page: "terms" };
+  if (path === "/privacy") return { kind: "legal", page: "privacy" };
+  if (path === "/hipaa")   return { kind: "legal", page: "hipaa" };
   return { kind: "app" };
 }
 
@@ -396,6 +408,15 @@ function InviteRoute({ token }) {
 
 export default function AnonyHealthApp() {
   const [route] = useState(parseRoute);
+
+  if (route.kind === "legal") {
+    // Legal pages are public — no auth, no tenant lookup.
+    return (
+      <Suspense fallback={null}>
+        <LegalPage kind={route.page} />
+      </Suspense>
+    );
+  }
 
   if (route.kind === "invite") {
     // Invite URL bypasses the normal gates so a patient can sign up to accept.
