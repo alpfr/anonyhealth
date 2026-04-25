@@ -41,6 +41,19 @@ export const BillingInactiveMobile = ({ theme, subscription, onRefresh }) => {
     }
   };
 
+  const syncFromStripe = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await callFunction("sync-subscription", {});
+      await onRefresh();
+    } catch (e) {
+      setError(e.message || "Unable to sync.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // If a Stripe customer already exists, the doctor's subscription is
   // recoverable via the billing portal. If not (e.g., they bailed out of
   // the initial checkout), the only way forward is to re-run checkout.
@@ -95,11 +108,12 @@ export const BillingInactiveMobile = ({ theme, subscription, onRefresh }) => {
       </button>
 
       <button
-        onClick={onRefresh}
+        onClick={syncFromStripe}
+        disabled={busy}
         style={{
           marginTop: 12, padding: "12px 16px", borderRadius: 12,
           background: "transparent", border: `1px solid ${t.border}`, color: t.text,
-          fontSize: 14, cursor: "pointer",
+          fontSize: 14, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.6 : 1,
         }}
       >
         I've reactivated — refresh

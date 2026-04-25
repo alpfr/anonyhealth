@@ -9,6 +9,7 @@ import { useTenant } from "./context/TenantContext";
 import { supabase } from "./supabaseClient";
 import { fetchProviders as fetchProvidersService } from "./services/providers";
 import { logAuditEvent } from "./utils/audit";
+import { callFunction } from "./utils/functions";
 import { isValidEmail, isStrongPassword } from "./utils/validation";
 import { T, Icons, Stars } from "./constants/theme";
 import { PROVIDERS } from "./data/providers";
@@ -267,7 +268,10 @@ const TenantGate = ({ children }) => {
   const [route] = useState(parseRoute);
   const [postCheckout, setPostCheckout] = useState(route.kind === "billing_success");
 
-  // After Stripe redirects back, poll for a live subscription row (webhook race).
+  // After Stripe redirects back, pull the subscription state from Stripe via
+  // the sync-subscription Edge Function (primary) and refresh the tenant
+  // context. Webhooks remain a future enhancement; this guarantees the
+  // user sees their active trial without depending on real-time delivery.
   useEffect(() => {
     if (!postCheckout) return;
     if (hasActiveSubscription) {
@@ -279,13 +283,14 @@ const TenantGate = ({ children }) => {
     let tries = 0;
     const id = setInterval(async () => {
       tries += 1;
+      try { await callFunction("sync-subscription", {}); } catch (e) { console.warn("sync failed:", e.message); }
       await refresh();
-      if (tries >= 10) {
+      if (tries >= 8) {
         clearInterval(id);
         window.history.replaceState(null, "", "/");
         setPostCheckout(false);
       }
-    }, 1500);
+    }, 1800);
     return () => clearInterval(id);
   }, [postCheckout, hasActiveSubscription, refresh]);
 

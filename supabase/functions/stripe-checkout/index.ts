@@ -117,6 +117,24 @@ serve(async (req) => {
         customerId = customer.id;
     }
 
+    // Persist the customer id immediately so sync-subscription can find this
+    // tenant's Stripe state without a webhook ever firing.
+    const { error: stubErr } = await admin
+        .from("subscriptions")
+        .upsert(
+            {
+                tenant_id: tenantId,
+                stripe_customer_id: customerId,
+                status: existingSub?.status ?? "incomplete",
+                updated_at: new Date().toISOString(),
+            },
+            { onConflict: "tenant_id" },
+        );
+    if (stubErr) {
+        console.error("subscriptions stub upsert failed:", stubErr.message);
+        // non-fatal — checkout still works, sync-subscription has a fallback
+    }
+
     // 3. Create the Checkout Session.
     const session = await stripe.checkout.sessions.create({
         mode: "subscription",
