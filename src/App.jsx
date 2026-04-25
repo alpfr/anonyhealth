@@ -37,6 +37,7 @@ const PatientDetailMobile = lazy(() => import("./screens/PatientDetailMobile").t
 const MessagesMobile = lazy(() => import("./screens/MessagesMobile").then(m => ({ default: m.MessagesMobile })));
 const ProviderProfileMobile = lazy(() => import("./screens/ProviderProfileMobile").then(m => ({ default: m.ProviderProfileMobile })));
 const LegalPage = lazy(() => import("./screens/LegalPage").then(m => ({ default: m.LegalPage })));
+const LandingPage = lazy(() => import("./screens/LandingPage").then(m => ({ default: m.LandingPage })));
 
 // Loading fallback for lazy components
 const ScreenLoader = ({ theme }) => {
@@ -54,9 +55,9 @@ const ScreenLoader = ({ theme }) => {
 // ═══════════════════════════════════════════════════════════
 // AUTH GATE — email + password sign in, signup with 6-digit email OTP
 // ═══════════════════════════════════════════════════════════
-const AuthGate = ({ children }) => {
+const AuthGate = ({ children, initialMode = "signin", showLanding = false }) => {
   const { session, loading, signIn } = useAuth();
-  const [mode, setMode] = useState("signin"); // signin | signup | verify
+  const [mode, setMode] = useState(initialMode); // signin | signup | verify
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
@@ -139,6 +140,17 @@ const AuthGate = ({ children }) => {
     );
   }
   if (session) return children;
+
+  if (showLanding) {
+    return (
+      <Suspense fallback={null}>
+        <LandingPage
+          onPrimaryAction={() => { window.location.href = "/signup"; }}
+          onSignIn={() => { window.location.href = "/signin"; }}
+        />
+      </Suspense>
+    );
+  }
 
   const activeTabStyle = { borderBottom: "2px solid #0f172a", color: "#0f172a", fontWeight: 600 };
   const inactiveTabStyle = { borderBottom: "2px solid transparent", color: "#64748b", fontWeight: 500 };
@@ -273,6 +285,8 @@ function parseRoute() {
   if (path === "/terms")   return { kind: "legal", page: "terms" };
   if (path === "/privacy") return { kind: "legal", page: "privacy" };
   if (path === "/hipaa")   return { kind: "legal", page: "hipaa" };
+  if (path === "/signup")  return { kind: "auth", mode: "signup" };
+  if (path === "/signin")  return { kind: "auth", mode: "signin" };
   return { kind: "app" };
 }
 
@@ -423,8 +437,11 @@ export default function AnonyHealthApp() {
     return <InviteRoute token={route.token} />;
   }
 
+  const isAuthRoute = route.kind === "auth";
+  const initialMode = isAuthRoute ? route.mode : "signin";
+
   return (
-    <AuthGate>
+    <AuthGate initialMode={initialMode} showLanding={!isAuthRoute}>
       <TenantGate>
         <AnonyHealthAppContent />
       </TenantGate>
