@@ -1,5 +1,3 @@
-import { PhoneFrame } from "./components/PhoneFrame";
-import { MobileNav } from "./components/MobileNav";
 import { BottomNav } from "./components/BottomNav";
 import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 
@@ -7,27 +5,16 @@ import { useAuth } from "./context/AuthContext";
 import { useTheme } from "./context/ThemeContext";
 import { useTenant } from "./context/TenantContext";
 import { supabase } from "./supabaseClient";
-import { fetchProviders as fetchProvidersService } from "./services/providers";
 import { logAuditEvent } from "./utils/audit";
 import { callFunction } from "./utils/functions";
 import { isValidEmail, isStrongPassword } from "./utils/validation";
-import { T, Icons, Stars } from "./constants/theme";
-import { PROVIDERS } from "./data/providers";
-
-import { FilterChip } from "./components/FilterChip";
-import { ProviderCard } from "./components/ProviderCard";
-import { Toggle } from "./components/Toggle";
+import { T, Icons } from "./constants/theme";
 
 // Lazy-loaded screens for code splitting
-const FindProviderDesktop = lazy(() => import("./screens/FindProviderDesktop").then(m => ({ default: m.FindProviderDesktop })));
-const ProviderDetailsMobile = lazy(() => import("./screens/ProviderDetailsMobile").then(m => ({ default: m.ProviderDetailsMobile })));
 const PatientDashboard = lazy(() => import("./screens/PatientDashboard").then(m => ({ default: m.PatientDashboard })));
 const AIChatMobile = lazy(() => import("./screens/AIChatMobile").then(m => ({ default: m.AIChatMobile })));
-const RegisterMobile = lazy(() => import("./screens/RegisterMobile").then(m => ({ default: m.RegisterMobile })));
-const AnonReviewMobile = lazy(() => import("./screens/AnonReviewMobile").then(m => ({ default: m.AnonReviewMobile })));
 const SettingsMobile = lazy(() => import("./screens/SettingsMobile").then(m => ({ default: m.SettingsMobile })));
 const HistoryMobile = lazy(() => import("./screens/HistoryMobile").then(m => ({ default: m.HistoryMobile })));
-const FindProviderMobile = lazy(() => import("./screens/FindProviderMobile").then(m => ({ default: m.FindProviderMobile })));
 const AboutMobile = lazy(() => import("./screens/AboutMobile").then(m => ({ default: m.AboutMobile })));
 const DoctorOnboardingMobile = lazy(() => import("./screens/DoctorOnboardingMobile").then(m => ({ default: m.DoctorOnboardingMobile })));
 const BillingInactiveMobile = lazy(() => import("./screens/BillingInactiveMobile").then(m => ({ default: m.BillingInactiveMobile })));
@@ -449,89 +436,44 @@ export default function AnonyHealthApp() {
   );
 }
 
-const BREAKPOINT = 1024;
-
+// Single responsive shell. Same layout on phone and desktop — content
+// constrained to a max-width column on wider screens. No phone-frame
+// preview, no view-mode switcher, no provider directory. Patients have
+// exactly one provider; doctors have a separate DoctorApp shell.
 function AnonyHealthAppContent() {
   const { theme, t, isDark, toggleTheme } = useTheme();
   const { session } = useAuth();
-  // desktopScreen reserved for future desktop-specific navigation
-  const [desktopScreen] = useState("providers"); // eslint-disable-line no-unused-vars
-  const [mobileScreen, setMobileScreen] = useState("dashboard");
+  const [screen, setScreen] = useState("dashboard");
   const [chatInitialMsg, setChatInitialMsg] = useState("");
-  // selectedProvider drives the (now dead) desktop directory preview.
-  // eslint-disable-next-line no-unused-vars
-  const [selectedProvider, setSelectedProvider] = useState(0);
-  const [providers, setProviders] = useState(PROVIDERS);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < BREAKPOINT);
-  const [viewMode, setViewMode] = useState(window.innerWidth < BREAKPOINT ? "mobile" : "split");
 
-  // Fetch providers from DB with fallback
-  useEffect(() => {
-    let cancelled = false;
-    fetchProvidersService().then(data => {
-      if (!cancelled) setProviders(data);
-    });
-    return () => { cancelled = true; };
+  const navigate = useCallback((s, msg) => {
+    setChatInitialMsg(msg ?? "");
+    setScreen(s);
   }, []);
 
-  // Debounced resize handler
-  useEffect(() => {
-    let timeoutId;
-    const handleResize = () => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => {
-        const mobile = window.innerWidth < BREAKPOINT;
-        setIsMobile(mobile);
-        if (mobile) setViewMode("mobile");
-      }, 150);
-    };
-    window.addEventListener("resize", handleResize);
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener("resize", handleResize);
-    };
-  }, []);
-
-  // Memoized navigation handler to avoid re-creating on every render
-  const handleMobileNavigate = useCallback((s, msg) => {
-    if (msg) setChatInitialMsg(msg);
-    else setChatInitialMsg("");
-    setMobileScreen(s);
-  }, []);
-
-  const handleSelectProvider = useCallback((i) => {
-    setSelectedProvider(i);
-    setMobileScreen("providerDetail");
-  }, []);
-
-  const renderMobile = () => {
-    const screenProps = { theme };
-    return (
-      <Suspense fallback={<ScreenLoader theme={theme} />}>
-        {(() => {
-          switch (mobileScreen) {
-            case "dashboard": return <PatientDashboard {...screenProps} onNavigate={handleMobileNavigate} />;
-            case "chat": return <AIChatMobile {...screenProps} initialMsg={chatInitialMsg} onBack={() => setMobileScreen("dashboard")} />;
-            case "messages": return <MessagesMobile {...screenProps} headerLabel="Your provider" onBack={() => setMobileScreen("dashboard")} />;
-            case "settings": return <SettingsMobile {...screenProps} session={session} onNavigate={(s) => setMobileScreen(s)} onBack={() => setMobileScreen("dashboard")} />;
-            case "about": return <AboutMobile {...screenProps} onBack={() => setMobileScreen("dashboard")} />;
-            case "history": return <HistoryMobile {...screenProps} onBack={() => setMobileScreen("dashboard")} />;
-            // Provider directory + register screens removed: in the multi-tenant
-            // model, patients belong to exactly one tenant via invite, so
-            // they never browse a provider directory. Mock data screens
-            // (FindProvider*, ProviderDetails, AnonReview, RegisterMobile)
-            // are kept in-tree but no longer reachable from patient nav.
-            default: return <PatientDashboard {...screenProps} onNavigate={(s) => setMobileScreen(s)} />;
-          }
-        })()}
-      </Suspense>
-    );
+  const renderScreen = () => {
+    const props = { theme };
+    switch (screen) {
+      case "chat":
+        return <AIChatMobile {...props} initialMsg={chatInitialMsg} onBack={() => setScreen("dashboard")} />;
+      case "messages":
+        return <MessagesMobile {...props} headerLabel="Your provider" onBack={() => setScreen("dashboard")} />;
+      case "settings":
+        return <SettingsMobile {...props} session={session} onNavigate={(s) => setScreen(s)} onBack={() => setScreen("dashboard")} />;
+      case "about":
+        return <AboutMobile {...props} onBack={() => setScreen("dashboard")} />;
+      case "history":
+        return <HistoryMobile {...props} onBack={() => setScreen("dashboard")} />;
+      default:
+        return <PatientDashboard {...props} onNavigate={navigate} />;
+    }
   };
 
   return (
     <div style={{
-      minHeight: "100vh", background: t.bg, transition: "background 0.4s",
+      minHeight: "100vh", background: t.bg, color: t.text,
       fontFamily: "'Outfit', -apple-system, sans-serif",
+      display: "flex", flexDirection: "column",
     }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap');
@@ -539,187 +481,34 @@ function AnonyHealthAppContent() {
         body { overflow-x: hidden; background: ${t.bg}; }
         input::placeholder { color: ${t.textMut}; }
         ::selection { background: ${t.accent}25; }
-        ::-webkit-scrollbar { width: 5px; height: 5px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: ${t.border}; border-radius: 3px; }
         button { transition: all 0.2s; }
         button:hover { filter: brightness(1.04); }
         button:active { transform: scale(0.97); }
         @keyframes chatIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes dotPulse { 0%,60%,100% { transform: translateY(0); opacity: 0.35; } 30% { transform: translateY(-5px); opacity: 1; } }
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
 
-      {/* Dark mode ambient */}
-      {isDark && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none", overflow: "hidden" }}>
-          <div style={{
-            position: "absolute", top: "-15%", left: "-5%", width: "45%", height: "45%",
-            background: "radial-gradient(circle, rgba(56,189,248,0.03) 0%, transparent 70%)",
-            animation: "floatA 22s ease-in-out infinite",
-          }} />
-          <div style={{
-            position: "absolute", bottom: "-15%", right: "-5%", width: "50%", height: "50%",
-            background: "radial-gradient(circle, rgba(192,132,252,0.03) 0%, transparent 70%)",
-            animation: "floatA 28s ease-in-out infinite reverse",
-          }} />
-          <div style={{
-            position: "absolute", inset: 0,
-            backgroundImage: `radial-gradient(${t.accent}06 1px, transparent 1px)`,
-            backgroundSize: "32px 32px",
-          }} />
-          <style>{`@keyframes floatA { 0%,100% { transform: translate(0,0); } 50% { transform: translate(30px,-20px); } }`}</style>
-        </div>
-      )}
-
-      {/* Sidebar Navigation - Desktop only */}
-      {!isMobile && (
-        <div style={{
-          position: "fixed", top: 0, left: 0, bottom: 0, width: 220, zIndex: 100,
-          background: t.bgNav, backdropFilter: "blur(20px) saturate(180%)",
-          borderRight: `1px solid ${t.border}`,
-          padding: "24px 20px", display: "flex", flexDirection: "column", gap: 32,
-        }}>
-          {/* Logo */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, paddingLeft: 4 }}>
-            <div style={{
-              width: 34, height: 34, borderRadius: 10, background: t.gradient,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              boxShadow: isDark ? `0 0 16px ${t.accent}25` : "none",
-            }}>
-              {Icons.shield("#fff", 17)}
-            </div>
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: 17, fontWeight: 700, color: t.text, letterSpacing: "-0.02em", lineHeight: 1 }}>
-                <span style={{ color: t.accent }}>Anony</span>Health
-              </span>
-              <span style={{
-                fontSize: 10, fontWeight: 600, color: t.accent, opacity: 0.8, letterSpacing: "0.05em", marginTop: 2
-              }}>
-                CONFIDENTIAL PROTO
-              </span>
-            </div>
+      <div style={{
+        flex: 1, width: "100%", maxWidth: 480, margin: "0 auto",
+        display: "flex", flexDirection: "column", minHeight: 0, position: "relative",
+      }}>
+        <Suspense fallback={<ScreenLoader theme={theme} />}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            {renderScreen()}
           </div>
-
-          {/* Navigation */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 24, flex: 1 }}>
-
-            {/* View Modes */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: t.textMut, textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 8 }}>
-                View Mode
-              </div>
-              {["split", "desktop", "mobile"].map(mode => (
-                <button key={mode} onClick={() => setViewMode(mode)} style={{
-                  padding: "10px 14px", borderRadius: 10, border: "none", cursor: "pointer",
-                  fontSize: 13, fontWeight: 500, fontFamily: "'Outfit', sans-serif",
-                  background: viewMode === mode ? t.accentLight : "transparent",
-                  color: viewMode === mode ? t.accent : t.textSec,
-                  display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
-                  transition: "all 0.2s ease"
-                }}>
-                  {viewMode === mode && <div style={{ width: 4, height: 4, borderRadius: 2, background: t.accent }} />}
-                  {mode === "split" ? "Split View" : mode === "desktop" ? "Desktop Only" : "Mobile Only"}
-                </button>
-              ))}
-            </div>
-
-            {/* Mobile Screens */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: t.textMut, textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 8 }}>
-                Mobile Screens
-              </div>
-              {["dashboard", "findProvider", "chat", "register", "settings", "about"].map(s => (
-                <button key={s} onClick={() => setMobileScreen(s)} style={{
-                  padding: "10px 14px", borderRadius: 10, border: "none", cursor: "pointer",
-                  fontSize: 13, fontWeight: 500, fontFamily: "'Outfit', sans-serif",
-                  background: mobileScreen === s ? t.chipBg : "transparent",
-                  color: mobileScreen === s ? t.text : t.textMut,
-                  display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
-                  transition: "all 0.2s ease"
-                }}>
-                  {s === "dashboard" ? "Dashboard" : s === "findProvider" ? "Find Provider" : s === "chat" ? "AI Chat" : s === "register" ? "Register" : s === "settings" ? "Settings" : "About / Help"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Theme Toggle */}
-          <button onClick={toggleTheme} style={{
-            width: "100%", padding: "12px", borderRadius: 12, border: `1px solid ${t.border}`,
-            background: t.bgCard, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-            color: t.text, fontSize: 13, fontWeight: 600, fontFamily: "'Outfit', sans-serif"
-          }}>
-            {isDark ? Icons.sun(t.textSec) : Icons.moon(t.textSec)}
-            {isDark ? "Light Mode" : "Dark Mode"}
-          </button>
-        </div>
-      )}
-
-      {/* Content */}
-      <div style={{ paddingTop: isMobile ? 0 : 24, paddingLeft: isMobile ? 0 : 220, position: "relative", zIndex: 1, minHeight: "100vh" }}>
-        {viewMode === "split" && (
-          <div style={{
-            display: "flex", gap: 40, padding: "48px 40px", alignItems: "flex-start",
-            justifyContent: "center", minHeight: "calc(100vh - 64px)",
-          }}>
-            {/* Desktop */}
-            <div style={{ flex: "1 1 50%", maxWidth: 860, paddingTop: 8 }}>
-              <div style={{
-                padding: "3px 12px", borderRadius: 6, background: t.chipBg,
-                display: "inline-flex", alignItems: "center", gap: 5, marginBottom: 20,
-                border: `1px solid ${t.border}`,
-              }}>
-                <div style={{ width: 6, height: 6, borderRadius: 3, background: t.success }} />
-                <span style={{ fontSize: 11, fontWeight: 600, color: t.textSec, fontFamily: "'Outfit', sans-serif" }}>DESKTOP VIEW</span>
-              </div>
-              <Suspense fallback={<ScreenLoader theme={theme} />}>
-                <FindProviderDesktop theme={theme} providers={providers} onSelectProvider={handleSelectProvider} />
-              </Suspense>
-            </div>
-
-            {/* Mobile */}
-            <div style={{ flexShrink: 0, position: "sticky", top: 112 }}>
-              <div style={{
-                padding: "3px 12px", borderRadius: 6, background: t.chipBg,
-                display: "inline-flex", alignItems: "center", gap: 5, marginBottom: 16,
-                border: `1px solid ${t.border}`,
-              }}>
-                <div style={{ width: 6, height: 6, borderRadius: 3, background: t.accent }} />
-                <span style={{ fontSize: 11, fontWeight: 600, color: t.textSec, fontFamily: "'Outfit', sans-serif" }}>MOBILE VIEW</span>
-              </div>
-              <PhoneFrame theme={theme}>
-                {renderMobile()}
-              </PhoneFrame>
-            </div>
-          </div>
-        )}
-
-        {viewMode === "desktop" && (
-          <div style={{ padding: "48px 40px", maxWidth: 920, margin: "0 auto" }}>
-            <Suspense fallback={<ScreenLoader theme={theme} />}>
-              <FindProviderDesktop theme={theme} providers={providers} onSelectProvider={(i) => { setSelectedProvider(i); setMobileScreen("providerDetail"); setViewMode("mobile"); }} />
-            </Suspense>
-          </div>
-        )}
-
-        {viewMode === "mobile" && (
-          <div style={{ display: "flex", justifyContent: "center", padding: isMobile ? 0 : "48px 20px", height: isMobile ? "100vh" : "auto" }}>
-            {isMobile ? (
-              <div style={{ width: "100%", height: "100%", background: t.bg, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-                <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", position: "relative" }}>
-                  {renderMobile()}
-                </div>
-                <BottomNav theme={theme} current={mobileScreen} onNavigate={setMobileScreen} />
-              </div>
-            ) : (
-              <PhoneFrame theme={theme}>
-                {renderMobile()}
-              </PhoneFrame>
-            )}
-          </div>
-        )}
+        </Suspense>
+        <BottomNav theme={theme} current={screen} onNavigate={setScreen} />
       </div>
+
+      {/* Subtle theme toggle — corner button on wide screens. */}
+      <button onClick={toggleTheme} style={{
+        position: "fixed", bottom: 96, right: 16, zIndex: 60,
+        background: t.bgCard, border: `1px solid ${t.border}`,
+        padding: 8, borderRadius: 999, cursor: "pointer",
+        boxShadow: t.shadow, display: "flex",
+      }}>
+        {isDark ? Icons.sun(t.textSec, 16) : Icons.moon(t.textSec, 16)}
+      </button>
     </div>
   );
 }

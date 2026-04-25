@@ -5,12 +5,12 @@
 // advice and MUST be reviewed by a healthcare attorney before going live.
 // Anywhere you see {{PLACEHOLDER}}, replace with your actual values.
 
-const COMPANY_LEGAL_NAME = "{{COMPANY_LEGAL_NAME}}";
-const COMPANY_ADDRESS = "{{COMPANY_ADDRESS}}";
-const PRIVACY_EMAIL = "{{PRIVACY_EMAIL}}"; // e.g. privacy@anonyhealth.com
-const SUPPORT_EMAIL = "{{SUPPORT_EMAIL}}";
+const COMPANY_LEGAL_NAME = "ALPFR LLC";
+const COMPANY_ADDRESS = "{{6214 Autumn Haven Ct, Hanover, MD 21076}}";
+const PRIVACY_EMAIL = "{{privacy@alpfr.com}}"; // e.g. privacy@anonyhealth.com
+const SUPPORT_EMAIL = "{{admin@alpfr.com}}";
 const PHI_RETENTION_YEARS = "6";
-const EFFECTIVE_DATE = "{{EFFECTIVE_DATE}}"; // e.g. "April 24, 2026"
+const EFFECTIVE_DATE = "{{April 24, 2026}}"; // e.g. "April 24, 2026"
 
 const TERMS = `
 # Terms of Service
