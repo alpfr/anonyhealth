@@ -3,10 +3,9 @@ import { T, Icons } from "../constants/theme";
 export const BottomNav = ({ theme, current, onNavigate }) => {
   const t = T[theme];
   const items = [
-    { id: "dashboard", icon: Icons.menu, label: "Dash" },
-    { id: "findProvider", icon: Icons.search, label: "Find" },
+    { id: "dashboard", icon: Icons.menu, label: "Home" },
     { id: "chat", icon: Icons.bot, label: "Chat" },
-    { id: "register", icon: Icons.user, label: "Register" },
+    { id: "history", icon: Icons.clock || Icons.menu, label: "History" },
     { id: "settings", icon: Icons.settings, label: "Settings" },
   ];
 

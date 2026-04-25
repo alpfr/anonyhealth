@@ -400,6 +400,8 @@ function AnonyHealthAppContent() {
   const [desktopScreen] = useState("providers"); // eslint-disable-line no-unused-vars
   const [mobileScreen, setMobileScreen] = useState("dashboard");
   const [chatInitialMsg, setChatInitialMsg] = useState("");
+  // selectedProvider drives the (now dead) desktop directory preview.
+  // eslint-disable-next-line no-unused-vars
   const [selectedProvider, setSelectedProvider] = useState(0);
   const [providers, setProviders] = useState(PROVIDERS);
   const [isMobile, setIsMobile] = useState(window.innerWidth < BREAKPOINT);
@@ -451,14 +453,15 @@ function AnonyHealthAppContent() {
         {(() => {
           switch (mobileScreen) {
             case "dashboard": return <PatientDashboard {...screenProps} onNavigate={handleMobileNavigate} />;
-            case "findProvider": return <FindProviderMobile {...screenProps} providers={providers} onSelectProvider={handleSelectProvider} />;
-            case "providerDetail": return <ProviderDetailsMobile {...screenProps} provider={selectedProvider} providers={providers} onBack={() => setMobileScreen("findProvider")} onStartAnon={() => setMobileScreen("anonReview")} />;
-            case "anonReview": return <AnonReviewMobile {...screenProps} onBack={() => setMobileScreen("providerDetail")} onConfirm={() => setMobileScreen("dashboard")} />;
-            case "chat": return <AIChatMobile {...screenProps} initialMsg={chatInitialMsg} onBack={() => setMobileScreen("dashboard")} onBook={() => setMobileScreen("findProvider")} />;
-            case "register": return <RegisterMobile {...screenProps} onBack={() => setMobileScreen("dashboard")} />;
+            case "chat": return <AIChatMobile {...screenProps} initialMsg={chatInitialMsg} onBack={() => setMobileScreen("dashboard")} />;
             case "settings": return <SettingsMobile {...screenProps} session={session} onNavigate={(s) => setMobileScreen(s)} onBack={() => setMobileScreen("dashboard")} />;
             case "about": return <AboutMobile {...screenProps} onBack={() => setMobileScreen("dashboard")} />;
             case "history": return <HistoryMobile {...screenProps} onBack={() => setMobileScreen("dashboard")} />;
+            // Provider directory + register screens removed: in the multi-tenant
+            // model, patients belong to exactly one tenant via invite, so
+            // they never browse a provider directory. Mock data screens
+            // (FindProvider*, ProviderDetails, AnonReview, RegisterMobile)
+            // are kept in-tree but no longer reachable from patient nav.
             default: return <PatientDashboard {...screenProps} onNavigate={(s) => setMobileScreen(s)} />;
           }
         })()}
