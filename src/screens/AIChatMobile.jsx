@@ -5,13 +5,26 @@ import { MobileNav } from "../components/MobileNav";
 import { sanitizeChatMessage } from "../utils/validation";
 import { insertHealthLog } from "../services/healthLogs";
 import { useTenant } from "../context/TenantContext";
+import { getProviderProfile } from "../services/providerProfile";
+
+const ensureHttps = (u) => (u && /^https?:\/\//i.test(u) ? u : u ? `https://${u}` : null);
 
 // ═══════════════════════════════════════════════════════════
 // SCREEN: AI CHAT (MOBILE)
 // ═══════════════════════════════════════════════════════════
-export const AIChatMobile = ({ theme, initialMsg, onBack, onBook }) => {
+export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
   const t = T[theme];
   const { tenant } = useTenant();
+  const [bookingUrl, setBookingUrl] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!tenant?.id) return;
+    getProviderProfile(tenant.id)
+      .then((p) => { if (!cancelled) setBookingUrl(ensureHttps(p?.scheduling_url)); })
+      .catch(() => { /* non-fatal */ });
+    return () => { cancelled = true; };
+  }, [tenant?.id]);
   const [msgs, setMsgs] = useState(initialMsg ? [{ role: "user", text: initialMsg }] : []);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
@@ -217,16 +230,17 @@ export const AIChatMobile = ({ theme, initialMsg, onBack, onBook }) => {
           </div>
         )}
 
-        {msgs.length >= 2 && msgs[msgs.length - 1].role === "bot" && (
+        {msgs.length >= 2 && msgs[msgs.length - 1].role === "bot" && bookingUrl && (
           <div style={{ animation: "chatIn 0.4s ease-out", marginTop: 4 }}>
-            <button onClick={onBook} style={{
+            <a href={bookingUrl} target="_blank" rel="noopener noreferrer" style={{
               width: "100%", padding: "14px", borderRadius: 14, border: "none", cursor: "pointer",
               background: t.gradient, color: "#fff", fontSize: 14, fontWeight: 700,
               fontFamily: "'Outfit', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
               boxShadow: isDark ? `0 0 20px ${t.accent}30` : `0 4px 16px ${t.accent}20`,
+              textDecoration: "none", boxSizing: "border-box",
             }}>
               BOOK APPOINTMENT {Icons.arrowRight("#fff", 16)}
-            </button>
+            </a>
           </div>
         )}
       </div>
