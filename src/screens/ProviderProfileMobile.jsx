@@ -14,6 +14,7 @@ export const ProviderProfileMobile = ({ theme, onBack }) => {
     specialty: "",
     bio: "",
     avatar_url: "",
+    scheduling_url: "",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -33,6 +34,7 @@ export const ProviderProfileMobile = ({ theme, onBack }) => {
             specialty: row.specialty || "",
             bio: row.bio || "",
             avatar_url: row.avatar_url || "",
+            scheduling_url: row.scheduling_url || "",
           });
         } else if (tenant?.name) {
           setForm((f) => ({ ...f, display_name: tenant.name }));
@@ -94,6 +96,9 @@ export const ProviderProfileMobile = ({ theme, onBack }) => {
             </Field>
             <Field label="Avatar URL" hint="Optional. Public image URL.">
               <input value={form.avatar_url} onChange={onChange("avatar_url")} maxLength={1024} style={inputStyle} />
+            </Field>
+            <Field label="Scheduling link" hint="Calendly, Cal.com, or any public booking URL. Patients see a 'Book appointment' button.">
+              <input value={form.scheduling_url} onChange={onChange("scheduling_url")} maxLength={1024} placeholder="https://calendly.com/your-handle" style={inputStyle} />
             </Field>
 
             {error && <div style={{ marginTop: 12, color: "#dc2626", fontSize: 13 }}>{error}</div>}

@@ -101,6 +101,20 @@ export const PatientDashboard = ({ theme, onNavigate }) => {
                 {providerProfile.bio}
               </div>
             )}
+            {providerProfile?.scheduling_url && (
+              <a
+                href={providerProfile.scheduling_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "inline-block", marginTop: 10, padding: "8px 14px",
+                  borderRadius: 10, background: t.accent, color: "#fff",
+                  fontSize: 13, fontWeight: 600, textDecoration: "none",
+                }}
+              >
+                Book appointment →
+              </a>
+            )}
           </div>
         </div>
 

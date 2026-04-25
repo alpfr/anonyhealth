@@ -4,7 +4,7 @@ export async function getProviderProfile(tenantId) {
   if (!tenantId) return null;
   const { data, error } = await supabase
     .from("provider_profiles")
-    .select("tenant_id, display_name, credentials, specialty, bio, avatar_url, updated_at")
+    .select("tenant_id, display_name, credentials, specialty, bio, avatar_url, scheduling_url, updated_at")
     .eq("tenant_id", tenantId)
     .maybeSingle();
   if (error) throw error;
@@ -19,6 +19,7 @@ export async function upsertProviderProfile(tenantId, fields) {
     specialty: fields.specialty?.trim() || null,
     bio: fields.bio?.trim() || null,
     avatar_url: fields.avatar_url?.trim() || null,
+    scheduling_url: fields.scheduling_url?.trim() || null,
     updated_at: new Date().toISOString(),
   };
   if (!payload.display_name) return { error: "display_name is required" };
