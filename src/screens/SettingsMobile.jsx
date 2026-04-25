@@ -101,6 +101,16 @@ export const SettingsMobile = ({ theme, onBack, session, onNavigate }) => {
               <SettingsRow t={t} icon={Icons.mail(t.accent)} label="Email" desc={session.user.email} right={Icons.chevRight(t.textMut)} />
               {isDoctor && (
                 <>
+                  <div onClick={() => onNavigate("providerProfile")} style={{ padding: "16px 0", borderTop: `1px solid ${t.border}`, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: t.chipBg, display: "flex", alignItems: "center", justifyContent: "center" }}>{Icons.user(t.accent, 16)}</div>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: t.text, fontFamily: "'Outfit', sans-serif" }}>Provider profile</div>
+                        <div style={{ fontSize: 12, color: t.textMut, fontFamily: "'Outfit', sans-serif", marginTop: 1 }}>What your patients see</div>
+                      </div>
+                    </div>
+                    {Icons.chevRight(t.textMut)}
+                  </div>
                   <div onClick={openBillingPortal} style={{ padding: "16px 0", borderTop: `1px solid ${t.border}`, cursor: billingBusy ? "wait" : "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", opacity: billingBusy ? 0.6 : 1 }}>
                     <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                       <div style={{ width: 36, height: 36, borderRadius: 10, background: t.chipBg, display: "flex", alignItems: "center", justifyContent: "center" }}>{Icons.shield(t.accent, 16)}</div>

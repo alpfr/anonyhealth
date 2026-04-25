@@ -35,6 +35,7 @@ const AcceptInviteMobile = lazy(() => import("./screens/AcceptInviteMobile").the
 const DoctorDashboardMobile = lazy(() => import("./screens/DoctorDashboardMobile").then(m => ({ default: m.DoctorDashboardMobile })));
 const PatientDetailMobile = lazy(() => import("./screens/PatientDetailMobile").then(m => ({ default: m.PatientDetailMobile })));
 const MessagesMobile = lazy(() => import("./screens/MessagesMobile").then(m => ({ default: m.MessagesMobile })));
+const ProviderProfileMobile = lazy(() => import("./screens/ProviderProfileMobile").then(m => ({ default: m.ProviderProfileMobile })));
 
 // Loading fallback for lazy components
 const ScreenLoader = ({ theme }) => {
@@ -366,7 +367,16 @@ function DoctorApp() {
             theme={theme}
             onBack={() => setScreen({ name: "home" })}
             session={session}
-            onNavigate={() => setScreen({ name: "home" })}
+            onNavigate={(target) => {
+              if (target === "providerProfile") setScreen({ name: "providerProfile" });
+              else setScreen({ name: "home" });
+            }}
+          />
+        )}
+        {screen.name === "providerProfile" && (
+          <ProviderProfileMobile
+            theme={theme}
+            onBack={() => setScreen({ name: "settings" })}
           />
         )}
       </Suspense>

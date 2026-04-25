@@ -3,6 +3,7 @@ import { T, Icons } from "../constants/theme";
 import { MobileNav } from "../components/MobileNav";
 import { useTenant } from "../context/TenantContext";
 import { fetchHealthLogs } from "../services/healthLogs";
+import { getProviderProfile } from "../services/providerProfile";
 import { useAuth } from "../context/AuthContext";
 
 // ═══════════════════════════════════════════════════════════
@@ -18,13 +19,12 @@ export const PatientDashboard = ({ theme, onNavigate }) => {
   const [activityInput, setActivityInput] = useState("");
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [providerProfile, setProviderProfile] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     const userId = session?.user?.id;
     if (!userId) {
-      // No session — render the empty state. (Effects shouldn't setState
-      // synchronously; queue it.)
       queueMicrotask(() => { if (!cancelled) setLoading(false); });
       return () => { cancelled = true; };
     }
@@ -33,6 +33,15 @@ export const PatientDashboard = ({ theme, onNavigate }) => {
     });
     return () => { cancelled = true; };
   }, [session?.user?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!tenant?.id) return;
+    getProviderProfile(tenant.id)
+      .then((row) => { if (!cancelled) setProviderProfile(row); })
+      .catch(() => { /* non-fatal — banner falls back to tenant.name */ });
+    return () => { cancelled = true; };
+  }, [tenant?.id]);
 
   const handleActivitySubmit = (e) => {
     if (e.key === "Enter" && activityInput.trim()) {
@@ -56,15 +65,42 @@ export const PatientDashboard = ({ theme, onNavigate }) => {
         <div style={{
           padding: 16, borderRadius: 14, background: t.bgCard,
           border: `1px solid ${t.border}`, boxShadow: t.shadow, marginBottom: 24,
+          display: "flex", gap: 14, alignItems: "flex-start",
         }}>
-          <div style={{ fontSize: 11, color: t.textMut, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>
-            Your provider
-          </div>
-          <div style={{ fontSize: 17, fontWeight: 700, color: t.text, fontFamily: "'Outfit', sans-serif", marginTop: 4 }}>
-            {tenant?.name || "Loading..."}
-          </div>
-          <div style={{ fontSize: 12, color: t.textSec, fontFamily: "'Outfit', sans-serif", marginTop: 4 }}>
-            All triage and history is shared confidentially with your provider's practice.
+          {providerProfile?.avatar_url ? (
+            <img src={providerProfile.avatar_url} alt=""
+              style={{ width: 48, height: 48, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />
+          ) : (
+            <div style={{
+              width: 48, height: 48, borderRadius: 12, background: t.gradient,
+              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+              color: "#fff", fontWeight: 700, fontSize: 18,
+            }}>
+              {(providerProfile?.display_name || tenant?.name || "?").charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 11, color: t.textMut, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>
+              Your provider
+            </div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: t.text, fontFamily: "'Outfit', sans-serif", marginTop: 2 }}>
+              {providerProfile?.display_name || tenant?.name || "Loading..."}
+              {providerProfile?.credentials && (
+                <span style={{ fontSize: 13, fontWeight: 500, color: t.textSec, marginLeft: 6 }}>
+                  {providerProfile.credentials}
+                </span>
+              )}
+            </div>
+            {providerProfile?.specialty && (
+              <div style={{ fontSize: 12, color: t.accent, fontFamily: "'Outfit', sans-serif", marginTop: 2, fontWeight: 600 }}>
+                {providerProfile.specialty}
+              </div>
+            )}
+            {providerProfile?.bio && (
+              <div style={{ fontSize: 12, color: t.textSec, fontFamily: "'Outfit', sans-serif", marginTop: 6, lineHeight: 1.5 }}>
+                {providerProfile.bio}
+              </div>
+            )}
           </div>
         </div>
 
