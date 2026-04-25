@@ -11,6 +11,13 @@ export async function getProviderProfile(tenantId) {
   return data ?? null;
 }
 
+function normalizeUrl(raw) {
+  const v = raw?.trim();
+  if (!v) return null;
+  if (/^https?:\/\//i.test(v)) return v;
+  return `https://${v}`;
+}
+
 export async function upsertProviderProfile(tenantId, fields) {
   const payload = {
     tenant_id: tenantId,
@@ -18,8 +25,8 @@ export async function upsertProviderProfile(tenantId, fields) {
     credentials: fields.credentials?.trim() || null,
     specialty: fields.specialty?.trim() || null,
     bio: fields.bio?.trim() || null,
-    avatar_url: fields.avatar_url?.trim() || null,
-    scheduling_url: fields.scheduling_url?.trim() || null,
+    avatar_url: normalizeUrl(fields.avatar_url),
+    scheduling_url: normalizeUrl(fields.scheduling_url),
     updated_at: new Date().toISOString(),
   };
   if (!payload.display_name) return { error: "display_name is required" };

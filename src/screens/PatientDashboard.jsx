@@ -103,7 +103,9 @@ export const PatientDashboard = ({ theme, onNavigate }) => {
             )}
             {providerProfile?.scheduling_url && (
               <a
-                href={providerProfile.scheduling_url}
+                href={/^https?:\/\//i.test(providerProfile.scheduling_url)
+                  ? providerProfile.scheduling_url
+                  : `https://${providerProfile.scheduling_url}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
