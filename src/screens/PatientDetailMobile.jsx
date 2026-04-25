@@ -11,7 +11,7 @@ function severityColor(sev) {
   return "#16a34a";
 }
 
-export const PatientDetailMobile = ({ theme, patientUserId, onBack }) => {
+export const PatientDetailMobile = ({ theme, patientUserId, onBack, onMessage }) => {
   const t = T[theme];
   const { tenant } = useTenant();
   const [state, setState] = useState({ loading: true, profile: null, logs: [], error: "" });
@@ -49,6 +49,16 @@ export const PatientDetailMobile = ({ theme, patientUserId, onBack }) => {
 
         {!loading && !error && !profile && (
           <div style={{ fontSize: 13, color: t.textSec }}>Patient has not completed profile yet.</div>
+        )}
+
+        {onMessage && (
+          <button onClick={onMessage} style={{
+            marginTop: 16, padding: "10px 16px", borderRadius: 12, border: "none",
+            background: t.accent, color: "#fff", fontSize: 14, fontWeight: 600,
+            cursor: "pointer", fontFamily: "'Outfit', sans-serif",
+          }}>
+            Message patient
+          </button>
         )}
 
         <h2 style={{ fontSize: 13, color: t.textMut, textTransform: "uppercase", letterSpacing: "0.06em", margin: "24px 0 10px" }}>

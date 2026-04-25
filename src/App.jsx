@@ -34,6 +34,7 @@ const BillingInactiveMobile = lazy(() => import("./screens/BillingInactiveMobile
 const AcceptInviteMobile = lazy(() => import("./screens/AcceptInviteMobile").then(m => ({ default: m.AcceptInviteMobile })));
 const DoctorDashboardMobile = lazy(() => import("./screens/DoctorDashboardMobile").then(m => ({ default: m.DoctorDashboardMobile })));
 const PatientDetailMobile = lazy(() => import("./screens/PatientDetailMobile").then(m => ({ default: m.PatientDetailMobile })));
+const MessagesMobile = lazy(() => import("./screens/MessagesMobile").then(m => ({ default: m.MessagesMobile })));
 
 // Loading fallback for lazy components
 const ScreenLoader = ({ theme }) => {
@@ -349,6 +350,15 @@ function DoctorApp() {
             theme={theme}
             patientUserId={screen.patientUserId}
             onBack={() => setScreen({ name: "home" })}
+            onMessage={() => setScreen({ name: "messages", patientUserId: screen.patientUserId, patientLabel: screen.patientLabel })}
+          />
+        )}
+        {screen.name === "messages" && (
+          <MessagesMobile
+            theme={theme}
+            patientUserId={screen.patientUserId}
+            headerLabel={screen.patientLabel || "Patient"}
+            onBack={() => setScreen({ name: "patient", patientUserId: screen.patientUserId })}
           />
         )}
         {screen.name === "settings" && (
@@ -454,6 +464,7 @@ function AnonyHealthAppContent() {
           switch (mobileScreen) {
             case "dashboard": return <PatientDashboard {...screenProps} onNavigate={handleMobileNavigate} />;
             case "chat": return <AIChatMobile {...screenProps} initialMsg={chatInitialMsg} onBack={() => setMobileScreen("dashboard")} />;
+            case "messages": return <MessagesMobile {...screenProps} headerLabel="Your provider" onBack={() => setMobileScreen("dashboard")} />;
             case "settings": return <SettingsMobile {...screenProps} session={session} onNavigate={(s) => setMobileScreen(s)} onBack={() => setMobileScreen("dashboard")} />;
             case "about": return <AboutMobile {...screenProps} onBack={() => setMobileScreen("dashboard")} />;
             case "history": return <HistoryMobile {...screenProps} onBack={() => setMobileScreen("dashboard")} />;

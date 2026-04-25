@@ -5,6 +5,7 @@ export const BottomNav = ({ theme, current, onNavigate }) => {
   const items = [
     { id: "dashboard", icon: Icons.menu, label: "Home" },
     { id: "chat", icon: Icons.bot, label: "Chat" },
+    { id: "messages", icon: Icons.mail || Icons.bot, label: "Messages" },
     { id: "history", icon: Icons.clock || Icons.menu, label: "History" },
     { id: "settings", icon: Icons.settings, label: "Settings" },
   ];

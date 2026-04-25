@@ -17,6 +17,8 @@ const ALLOWED_EVENT_TYPES = new Set([
     "health_log.create",
     "settings.change",
     "phi.read",
+    "message.send",
+    "message.read",
 ]);
 
 const MAX_DETAIL_LENGTH = 512;
