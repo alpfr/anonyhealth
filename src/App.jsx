@@ -25,6 +25,7 @@ const MessagesMobile = lazy(() => import("./screens/MessagesMobile").then(m => (
 const ProviderProfileMobile = lazy(() => import("./screens/ProviderProfileMobile").then(m => ({ default: m.ProviderProfileMobile })));
 const LegalPage = lazy(() => import("./screens/LegalPage").then(m => ({ default: m.LegalPage })));
 const LandingPage = lazy(() => import("./screens/LandingPage").then(m => ({ default: m.LandingPage })));
+const PatientProfileSetup = lazy(() => import("./screens/PatientProfileSetup").then(m => ({ default: m.PatientProfileSetup })));
 
 // Loading fallback for lazy components
 const ScreenLoader = ({ theme }) => {
@@ -443,8 +444,21 @@ export default function AnonyHealthApp() {
 function AnonyHealthAppContent() {
   const { theme, t, isDark, toggleTheme } = useTheme();
   const { session } = useAuth();
+  const { tenant } = useTenant();
   const [screen, setScreen] = useState("dashboard");
   const [chatInitialMsg, setChatInitialMsg] = useState("");
+  const [profileState, setProfileState] = useState({ loading: true, exists: false });
+
+  useEffect(() => {
+    let cancelled = false;
+    const userId = session?.user?.id;
+    if (!userId) { setProfileState({ loading: false, exists: false }); return; }
+    import("./services/patientProfile")
+      .then(({ getPatientProfile }) => getPatientProfile(userId))
+      .then((row) => { if (!cancelled) setProfileState({ loading: false, exists: !!row }); })
+      .catch(() => { if (!cancelled) setProfileState({ loading: false, exists: false }); });
+    return () => { cancelled = true; };
+  }, [session?.user?.id]);
 
   const navigate = useCallback((s, msg) => {
     setChatInitialMsg(msg ?? "");
@@ -494,10 +508,24 @@ function AnonyHealthAppContent() {
       }}>
         <Suspense fallback={<ScreenLoader theme={theme} />}>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            {renderScreen()}
+            {profileState.loading ? (
+              <ScreenLoader theme={theme} />
+            ) : !profileState.exists ? (
+              <PatientProfileSetup
+                theme={theme}
+                userId={session?.user?.id}
+                tenantId={tenant?.id}
+                tenantName={tenant?.name}
+                onComplete={() => setProfileState({ loading: false, exists: true })}
+              />
+            ) : (
+              renderScreen()
+            )}
           </div>
         </Suspense>
-        <BottomNav theme={theme} current={screen} onNavigate={setScreen} />
+        {profileState.exists && (
+          <BottomNav theme={theme} current={screen} onNavigate={setScreen} />
+        )}
       </div>
 
       {/* Subtle theme toggle — corner button on wide screens. */}

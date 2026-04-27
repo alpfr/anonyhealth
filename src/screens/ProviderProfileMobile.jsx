@@ -59,6 +59,7 @@ export const ProviderProfileMobile = ({ theme, onBack }) => {
     }
     setSavedAt(new Date());
     logAuditEvent("profile.update", "provider profile saved");
+    setTimeout(() => onBack?.(), 900);
   };
 
   const inputStyle = {
@@ -114,7 +115,15 @@ export const ProviderProfileMobile = ({ theme, onBack }) => {
               cursor: saving ? "wait" : "pointer", opacity: (saving || !form.display_name.trim()) ? 0.6 : 1,
               width: "100%",
             }}>
-              {saving ? "Saving..." : "Save"}
+              {saving ? "Saving..." : "Save & close"}
+            </button>
+            <button onClick={() => onBack?.()} disabled={saving} style={{
+              marginTop: 10, padding: "12px 16px", borderRadius: 12,
+              border: `1px solid ${t.border}`, background: "transparent", color: t.text,
+              fontSize: 14, fontWeight: 500, cursor: saving ? "not-allowed" : "pointer",
+              width: "100%",
+            }}>
+              Done
             </button>
           </>
         )}
