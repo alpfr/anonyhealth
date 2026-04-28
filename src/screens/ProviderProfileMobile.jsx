@@ -47,8 +47,36 @@ export const ProviderProfileMobile = ({ theme, onBack }) => {
 
   const onChange = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
+  const validateSchedulingUrl = (raw) => {
+    const v = raw?.trim();
+    if (!v) return null;
+    const withScheme = /^https?:\/\//i.test(v) ? v : `https://${v}`;
+    let url;
+    try { url = new URL(withScheme); } catch { return "Scheduling link is not a valid URL."; }
+    if (!/^https?:$/.test(url.protocol)) return "Scheduling link must be http or https.";
+    if (!url.hostname.includes(".")) return "Scheduling link is missing a valid domain.";
+    const knownBookingHosts = ["calendly.com", "cal.com", "savvycal.com", "tidycal.com"];
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    if (knownBookingHosts.some((h) => host === h || host.endsWith(`.${h}`))) {
+      const path = url.pathname.replace(/\/+$/, "");
+      if (!path || path === "/") return "Scheduling link needs your handle (e.g. calendly.com/your-name).";
+    }
+    return null;
+  };
+
+  const testSchedulingUrl = () => {
+    const v = form.scheduling_url?.trim();
+    if (!v) return;
+    const err = validateSchedulingUrl(v);
+    if (err) { setError(err); return; }
+    const href = /^https?:\/\//i.test(v) ? v : `https://${v}`;
+    window.open(href, "_blank", "noopener,noreferrer");
+  };
+
   const save = async () => {
     if (!tenant?.id) return;
+    const urlErr = validateSchedulingUrl(form.scheduling_url);
+    if (urlErr) { setError(urlErr); return; }
     setSaving(true);
     setError("");
     const { error: err } = await upsertProviderProfile(tenant.id, form);
@@ -100,6 +128,15 @@ export const ProviderProfileMobile = ({ theme, onBack }) => {
             </Field>
             <Field label="Scheduling link" hint="Calendly, Cal.com, or any public booking URL. Patients see a 'Book appointment' button.">
               <input value={form.scheduling_url} onChange={onChange("scheduling_url")} maxLength={1024} placeholder="https://calendly.com/your-handle" style={inputStyle} />
+              {form.scheduling_url?.trim() && (
+                <button type="button" onClick={testSchedulingUrl} style={{
+                  marginTop: 8, padding: "8px 12px", borderRadius: 8,
+                  border: `1px solid ${t.border}`, background: "transparent", color: t.text,
+                  fontSize: 12, fontWeight: 500, cursor: "pointer",
+                }}>
+                  Test link in new tab
+                </button>
+              )}
             </Field>
 
             {error && <div style={{ marginTop: 12, color: "#dc2626", fontSize: 13 }}>{error}</div>}
