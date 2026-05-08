@@ -26,6 +26,8 @@ const ProviderProfileMobile = lazy(() => import("./screens/ProviderProfileMobile
 const LegalPage = lazy(() => import("./screens/LegalPage").then(m => ({ default: m.LegalPage })));
 const LandingPage = lazy(() => import("./screens/LandingPage").then(m => ({ default: m.LandingPage })));
 const PatientProfileSetup = lazy(() => import("./screens/PatientProfileSetup").then(m => ({ default: m.PatientProfileSetup })));
+const BookAppointmentMobile = lazy(() => import("./screens/BookAppointmentMobile").then(m => ({ default: m.BookAppointmentMobile })));
+const AppointmentRequestsMobile = lazy(() => import("./screens/AppointmentRequestsMobile").then(m => ({ default: m.AppointmentRequestsMobile })));
 
 // Loading fallback for lazy components
 const ScreenLoader = ({ theme }) => {
@@ -358,6 +360,7 @@ function DoctorApp() {
             theme={theme}
             onOpenPatient={(id) => setScreen({ name: "patient", patientUserId: id })}
             onOpenSettings={() => setScreen({ name: "settings" })}
+            onOpenAppointments={() => setScreen({ name: "appointmentRequests" })}
           />
         )}
         {screen.name === "patient" && (
@@ -391,6 +394,12 @@ function DoctorApp() {
           <ProviderProfileMobile
             theme={theme}
             onBack={() => setScreen({ name: "settings" })}
+          />
+        )}
+        {screen.name === "appointmentRequests" && (
+          <AppointmentRequestsMobile
+            theme={theme}
+            onBack={() => setScreen({ name: "home" })}
           />
         )}
       </Suspense>
@@ -478,6 +487,8 @@ function AnonyHealthAppContent() {
         return <AboutMobile {...props} onBack={() => setScreen("dashboard")} />;
       case "history":
         return <HistoryMobile {...props} onBack={() => setScreen("dashboard")} />;
+      case "book":
+        return <BookAppointmentMobile {...props} onBack={() => setScreen("dashboard")} />;
       default:
         return <PatientDashboard {...props} onNavigate={navigate} />;
     }

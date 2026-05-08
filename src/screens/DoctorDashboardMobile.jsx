@@ -5,7 +5,7 @@ import { MobileNav } from "../components/MobileNav";
 import { callFunction } from "../utils/functions";
 import { listTenantPatients } from "../services/doctor";
 
-export const DoctorDashboardMobile = ({ theme, onOpenPatient, onOpenSettings }) => {
+export const DoctorDashboardMobile = ({ theme, onOpenPatient, onOpenSettings, onOpenAppointments }) => {
   const t = T[theme];
   const { tenant, subscription } = useTenant();
   const [patients, setPatients] = useState([]);
@@ -92,6 +92,18 @@ export const DoctorDashboardMobile = ({ theme, onOpenPatient, onOpenSettings }) 
               </div>
             </div>
           )}
+        </div>
+
+        <div onClick={onOpenAppointments} style={{
+          marginTop: 12, padding: 14, borderRadius: 12, cursor: "pointer",
+          background: t.bgCard, border: `1px solid ${t.border}`,
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+        }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>Appointment requests</div>
+            <div style={{ fontSize: 12, color: t.textSec, marginTop: 2 }}>Confirm or propose times</div>
+          </div>
+          <div style={{ fontSize: 18, color: t.textMut }}>›</div>
         </div>
 
         <h2 style={{ fontSize: 13, color: t.textMut, textTransform: "uppercase", letterSpacing: "0.06em", margin: "24px 0 10px" }}>

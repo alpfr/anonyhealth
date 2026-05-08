@@ -101,7 +101,7 @@ export const PatientDashboard = ({ theme, onNavigate }) => {
                 {providerProfile.bio}
               </div>
             )}
-            {providerProfile?.scheduling_url && (
+            {providerProfile?.scheduling_url ? (
               <a
                 href={/^https?:\/\//i.test(providerProfile.scheduling_url)
                   ? providerProfile.scheduling_url
@@ -116,6 +116,17 @@ export const PatientDashboard = ({ theme, onNavigate }) => {
               >
                 Book appointment →
               </a>
+            ) : (
+              <button
+                onClick={() => onNavigate("book")}
+                style={{
+                  marginTop: 10, padding: "8px 14px", borderRadius: 10,
+                  border: "none", background: t.accent, color: "#fff",
+                  fontSize: 13, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                Book appointment →
+              </button>
             )}
           </div>
         </div>
