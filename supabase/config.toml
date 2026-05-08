@@ -51,3 +51,8 @@ entrypoint = "./functions/export-tenant/index.ts"
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/sync-subscription/index.ts"
+
+[functions.send-appointment-email]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/send-appointment-email/index.ts"
