@@ -46,6 +46,15 @@ export const AuthProvider = ({ children }) => {
     return await supabase.auth.signOut();
   }, []);
 
+  const requestPasswordReset = useCallback(async (email) => {
+    const redirectTo = `${window.location.origin}/reset-password`;
+    return await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+  }, []);
+
+  const updatePassword = useCallback(async (newPassword) => {
+    return await supabase.auth.updateUser({ password: newPassword });
+  }, []);
+
   const value = useMemo(() => ({
     session,
     loading,
@@ -53,7 +62,9 @@ export const AuthProvider = ({ children }) => {
     signIn,
     signUp,
     signOut,
-  }), [session, loading, signIn, signUp, signOut]);
+    requestPasswordReset,
+    updatePassword,
+  }), [session, loading, signIn, signUp, signOut, requestPasswordReset, updatePassword]);
 
   return (
     <AuthContext.Provider value={value}>

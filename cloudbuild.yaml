@@ -60,6 +60,10 @@ availableSecrets:
       env: VITE_SUPABASE_URL
     - versionName: projects/$PROJECT_ID/secrets/VITE_SUPABASE_ANON_KEY/versions/latest
       env: VITE_SUPABASE_ANON_KEY
+    # To enable Sentry, create the secret and uncomment:
+    #   gcloud secrets create VITE_SENTRY_DSN --data-file=<(echo -n "https://...@sentry.io/...")
+    # - versionName: projects/$PROJECT_ID/secrets/VITE_SENTRY_DSN/versions/latest
+    #   env: VITE_SENTRY_DSN
 
 options:
   logging: CLOUD_LOGGING_ONLY

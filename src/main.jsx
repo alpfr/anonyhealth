@@ -6,6 +6,9 @@ import { ErrorBoundary } from './components/ErrorBoundary.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { ThemeProvider } from './context/ThemeContext.jsx'
 import { TenantProvider } from './context/TenantContext.jsx'
+import { initSentry } from './sentry.js'
+
+initSentry();
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

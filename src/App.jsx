@@ -28,6 +28,7 @@ const LandingPage = lazy(() => import("./screens/LandingPage").then(m => ({ defa
 const PatientProfileSetup = lazy(() => import("./screens/PatientProfileSetup").then(m => ({ default: m.PatientProfileSetup })));
 const BookAppointmentMobile = lazy(() => import("./screens/BookAppointmentMobile").then(m => ({ default: m.BookAppointmentMobile })));
 const AppointmentRequestsMobile = lazy(() => import("./screens/AppointmentRequestsMobile").then(m => ({ default: m.AppointmentRequestsMobile })));
+const ResetPasswordPage = lazy(() => import("./screens/ResetPasswordPage").then(m => ({ default: m.ResetPasswordPage })));
 
 // Loading fallback for lazy components
 const ScreenLoader = ({ theme }) => {
@@ -46,8 +47,8 @@ const ScreenLoader = ({ theme }) => {
 // AUTH GATE — email + password sign in, signup with 6-digit email OTP
 // ═══════════════════════════════════════════════════════════
 const AuthGate = ({ children, initialMode = "signin", showLanding = false }) => {
-  const { session, loading, signIn } = useAuth();
-  const [mode, setMode] = useState(initialMode); // signin | signup | verify
+  const { session, loading, signIn, requestPasswordReset } = useAuth();
+  const [mode, setMode] = useState(initialMode); // signin | signup | verify | forgot
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
@@ -56,6 +57,16 @@ const AuthGate = ({ children, initialMode = "signin", showLanding = false }) => 
   const [submitting, setSubmitting] = useState(false);
 
   const resetMessages = () => { setError(""); setInfo(""); };
+
+  const handleForgotPassword = useCallback(async () => {
+    setError(""); setInfo("");
+    if (!isValidEmail(email)) { setError("Please enter your email."); return; }
+    setSubmitting(true);
+    const { error: resetErr } = await requestPasswordReset(email);
+    setSubmitting(false);
+    if (resetErr) { setError(resetErr.message); return; }
+    setInfo("If an account exists for that email, a reset link is on its way.");
+  }, [email, requestPasswordReset]);
 
   const handleSignIn = useCallback(async () => {
     resetMessages();
@@ -185,7 +196,7 @@ const AuthGate = ({ children, initialMode = "signin", showLanding = false }) => 
         </div>
         <h2 style={{ fontSize: 20, fontWeight: 700, color: "#0f172a", marginBottom: 20 }}>AnonyHealth</h2>
 
-        {mode !== "verify" && (
+        {mode !== "verify" && mode !== "forgot" && (
           <>
             <p style={{ fontSize: 12, color: "#64748b", marginBottom: 16, textAlign: "center", lineHeight: 1.5 }}>
               For healthcare providers. Patients join through an invite link from their provider.
@@ -203,7 +214,33 @@ const AuthGate = ({ children, initialMode = "signin", showLanding = false }) => 
           </>
         )}
 
-        {mode === "verify" ? (
+        {mode === "forgot" ? (
+          <>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", margin: "0 0 8px" }}>Reset your password</h3>
+            <p style={{ fontSize: 13, color: "#64748b", marginBottom: 16, textAlign: "left" }}>
+              Enter your email and we'll send you a reset link.
+            </p>
+            <input type="email" inputMode="email" autoComplete="email"
+              className="auth-input"
+              placeholder="Email" value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleForgotPassword()}
+              style={inputStyle} />
+
+            {error && <div role="alert" style={{ fontSize: 13, color: "#ef4444", marginBottom: 12 }}>{error}</div>}
+            {info && <div style={{ fontSize: 13, color: "#16a34a", marginBottom: 12 }}>{info}</div>}
+
+            <button onClick={handleForgotPassword} disabled={submitting} style={primaryBtn(submitting)}>
+              {submitting ? "Sending..." : "Send reset link"}
+            </button>
+            <button type="button" onClick={() => { setMode("signin"); resetMessages(); }} style={{
+              marginTop: 12, background: "none", border: "none", color: "#64748b",
+              cursor: "pointer", fontSize: 13, padding: 0,
+            }}>
+              Back to sign in
+            </button>
+          </>
+        ) : mode === "verify" ? (
           <>
             <p style={{ fontSize: 13, color: "#64748b", marginBottom: 16, textAlign: "left" }}>{info}</p>
             <input
@@ -261,6 +298,15 @@ const AuthGate = ({ children, initialMode = "signin", showLanding = false }) => 
                 : (mode === "signin" ? "Sign In" : "Create provider account")}
             </button>
 
+            {mode === "signin" && (
+              <button type="button" onClick={() => { setMode("forgot"); resetMessages(); }} style={{
+                marginTop: 12, background: "none", border: "none", color: "#38bdf8",
+                cursor: "pointer", fontSize: 13, padding: 0,
+              }}>
+                Forgot your password?
+              </button>
+            )}
+
             <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #e2e8f0", fontSize: 12, color: "#64748b" }}>
               Patient with an invite? Open the link your provider sent you.
             </div>
@@ -293,6 +339,7 @@ function parseRoute() {
   if (path === "/hipaa")   return { kind: "legal", page: "hipaa" };
   if (path === "/signup")  return { kind: "auth", mode: "signup" };
   if (path === "/signin")  return { kind: "auth", mode: "signin" };
+  if (path === "/reset-password") return { kind: "reset_password" };
   return { kind: "app" };
 }
 
@@ -448,6 +495,16 @@ export default function AnonyHealthApp() {
   if (route.kind === "invite") {
     // Invite URL bypasses the normal gates so a patient can sign up to accept.
     return <InviteRoute token={route.token} />;
+  }
+
+  if (route.kind === "reset_password") {
+    // Recovery link from the password-reset email. Bypasses the auth gate;
+    // supabase-js handles the recovery token from the URL fragment.
+    return (
+      <Suspense fallback={null}>
+        <ResetPasswordPage />
+      </Suspense>
+    );
   }
 
   const isAuthRoute = route.kind === "auth";

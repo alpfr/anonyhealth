@@ -26,13 +26,60 @@ const fmtDate = (d: string) => new Date(d).toLocaleDateString(undefined,
 const fmtDateTime = (iso: string) => new Date(iso).toLocaleString(undefined,
     { weekday: "long", month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 
+// RFC 5545 ICS generator. Times are written as UTC (Z-suffixed) so the
+// receiving calendar app handles local-zone conversion. Default duration is
+// 30 minutes; we don't model end_at separately yet.
+function buildIcs(opts: {
+    uid: string; startIso: string; durationMinutes: number;
+    summary: string; description: string; organizerEmail: string | null;
+    attendeeEmail: string | null;
+}): string {
+    const start = new Date(opts.startIso);
+    const end = new Date(start.getTime() + opts.durationMinutes * 60_000);
+    const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+    const escape = (s: string) => s.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+    const lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//AnonyHealth//Appointment//EN",
+        "METHOD:REQUEST",
+        "CALSCALE:GREGORIAN",
+        "BEGIN:VEVENT",
+        `UID:${opts.uid}@anonyhealth.app`,
+        `DTSTAMP:${fmt(new Date())}`,
+        `DTSTART:${fmt(start)}`,
+        `DTEND:${fmt(end)}`,
+        `SUMMARY:${escape(opts.summary)}`,
+        `DESCRIPTION:${escape(opts.description)}`,
+        opts.organizerEmail ? `ORGANIZER:mailto:${opts.organizerEmail}` : "",
+        opts.attendeeEmail ? `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;RSVP=FALSE:mailto:${opts.attendeeEmail}` : "",
+        "STATUS:CONFIRMED",
+        "TRANSP:OPAQUE",
+        "END:VEVENT",
+        "END:VCALENDAR",
+    ].filter(Boolean);
+    return lines.join("\r\n");
+}
+
+type EmailMsg = { to: string; subject: string; text: string; ics?: string; icsFilename?: string };
+
 function buildEmails(kind: Kind, ctx: {
+    requestId: string;
     practice: string; patientName: string; patientEmail: string | null;
     providerEmail: string | null; preferredDate: string; preferredWindow: string;
     reason: string; urgency: string; proposedAt: string | null; providerNote: string | null;
-}): Array<{ to: string; subject: string; text: string }> {
-    const out: Array<{ to: string; subject: string; text: string }> = [];
+}): EmailMsg[] {
+    const out: EmailMsg[] = [];
     const proposed = ctx.proposedAt ? fmtDateTime(ctx.proposedAt) : null;
+    const ics = ctx.proposedAt ? buildIcs({
+        uid: ctx.requestId,
+        startIso: ctx.proposedAt,
+        durationMinutes: 30,
+        summary: `Appointment with ${ctx.practice}`,
+        description: `Reason: ${ctx.reason}${ctx.providerNote ? `\n\nProvider note: ${ctx.providerNote}` : ""}`,
+        organizerEmail: ctx.providerEmail,
+        attendeeEmail: ctx.patientEmail,
+    }) : null;
 
     if (kind === "request") {
         if (ctx.providerEmail) {
@@ -63,6 +110,7 @@ function buildEmails(kind: Kind, ctx: {
             });
         }
     } else if (kind === "confirm") {
+        const icsFilename = "appointment.ics";
         if (ctx.patientEmail && proposed) out.push({
             to: ctx.patientEmail,
             subject: `Appointment confirmed — ${proposed}`,
@@ -71,12 +119,16 @@ function buildEmails(kind: Kind, ctx: {
                 ``,
                 `${ctx.practice} confirmed your appointment for ${proposed}.`,
                 ctx.providerNote ? `\nNote from your provider: ${ctx.providerNote}` : "",
-            ].join("\n"),
+                ``,
+                `An attached calendar invite (.ics) is included so you can add this to your calendar.`,
+            ].filter(Boolean).join("\n"),
+            ics: ics ?? undefined, icsFilename,
         });
         if (ctx.providerEmail && proposed) out.push({
             to: ctx.providerEmail,
             subject: `Confirmed appointment — ${ctx.patientName} at ${proposed}`,
             text: `You confirmed an appointment with ${ctx.patientName} for ${proposed}.`,
+            ics: ics ?? undefined, icsFilename,
         });
     } else if (kind === "counter") {
         if (ctx.patientEmail && proposed) out.push({
@@ -116,10 +168,21 @@ function buildEmails(kind: Kind, ctx: {
     return out;
 }
 
-async function sendOne(to: string, subject: string, text: string): Promise<void> {
+async function sendOne(msg: EmailMsg): Promise<void> {
     if (!RESEND_API_KEY) {
-        console.log(`[email-stub] to=${to} subject="${subject}"`);
+        console.log(`[email-stub] to=${msg.to} subject="${msg.subject}"${msg.ics ? " ics=attached" : ""}`);
         return;
+    }
+    const payload: Record<string, unknown> = {
+        from: FROM_EMAIL, to: msg.to, subject: msg.subject, text: msg.text,
+    };
+    if (msg.ics) {
+        // Resend takes attachments as { filename, content (base64) }.
+        payload.attachments = [{
+            filename: msg.icsFilename ?? "appointment.ics",
+            content: btoa(msg.ics),
+            content_type: "text/calendar; charset=utf-8; method=REQUEST",
+        }];
     }
     const resp = await fetch("https://api.resend.com/emails", {
         method: "POST",
@@ -127,7 +190,7 @@ async function sendOne(to: string, subject: string, text: string): Promise<void>
             "Authorization": `Bearer ${RESEND_API_KEY}`,
             "Content-Type": "application/json",
         },
-        body: JSON.stringify({ from: FROM_EMAIL, to, subject, text }),
+        body: JSON.stringify(payload),
     });
     if (!resp.ok) {
         const body = await resp.text();
@@ -186,6 +249,7 @@ serve(async (req) => {
     ]);
 
     const emails = buildEmails(kind, {
+        requestId: reqRow.id,
         practice: tenant.name ?? "Your provider",
         patientName: profile?.full_name ?? "Patient",
         patientEmail: patientUser?.user?.email ?? null,
@@ -198,6 +262,6 @@ serve(async (req) => {
         providerNote: reqRow.provider_note,
     });
 
-    await Promise.all(emails.map((e) => sendOne(e.to, e.subject, e.text)));
+    await Promise.all(emails.map(sendOne));
     return jsonResponse({ sent: emails.length }, 200, corsHeaders);
 });
