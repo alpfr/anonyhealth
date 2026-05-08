@@ -146,7 +146,9 @@ const AuthGate = ({ children, initialMode = "signin", showLanding = false }) => 
   const inactiveTabStyle = { borderBottom: "2px solid transparent", color: "#64748b", fontWeight: 500 };
   const inputStyle = {
     width: "100%", padding: "14px 16px", borderRadius: 12, border: "1px solid #e2e8f0",
-    background: "#f1f5f9", fontSize: 14, marginBottom: 12, outline: "none", boxSizing: "border-box",
+    background: "#f1f5f9", color: "#0f172a", fontSize: 14, marginBottom: 12,
+    outline: "none", boxSizing: "border-box", colorScheme: "light",
+    WebkitTextFillColor: "#0f172a",
   };
   const primaryBtn = (busy) => ({
     width: "100%", padding: "14px", borderRadius: 12, border: "none",
@@ -159,6 +161,17 @@ const AuthGate = ({ children, initialMode = "signin", showLanding = false }) => 
       height: "100vh", background: "#f8fafc", fontFamily: "'Outfit', sans-serif",
       display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
     }}>
+      <style>{`
+        .auth-input { color: #0f172a !important; -webkit-text-fill-color: #0f172a !important; caret-color: #0f172a; }
+        .auth-input::placeholder { color: #94a3b8; opacity: 1; }
+        .auth-input:-webkit-autofill,
+        .auth-input:-webkit-autofill:hover,
+        .auth-input:-webkit-autofill:focus {
+          -webkit-text-fill-color: #0f172a !important;
+          -webkit-box-shadow: 0 0 0 100px #f1f5f9 inset !important;
+          caret-color: #0f172a;
+        }
+      `}</style>
       <div style={{
         width: "100%", maxWidth: 380, background: "#fff", padding: 32, borderRadius: 24,
         boxShadow: "0 20px 40px -10px rgba(0,0,0,0.1)", textAlign: "center",
@@ -194,6 +207,7 @@ const AuthGate = ({ children, initialMode = "signin", showLanding = false }) => 
           <>
             <p style={{ fontSize: 13, color: "#64748b", marginBottom: 16, textAlign: "left" }}>{info}</p>
             <input
+              className="auth-input"
               inputMode="numeric" maxLength={6} autoComplete="one-time-code"
               placeholder="6-digit code" value={otp}
               onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
@@ -218,12 +232,14 @@ const AuthGate = ({ children, initialMode = "signin", showLanding = false }) => 
         ) : (
           <>
             <input type="email" inputMode="email" autoComplete="email"
+              className="auth-input"
               placeholder="Email" value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && (mode === "signin" ? handleSignIn() : handleSignUp())}
               style={inputStyle} />
             <input type="password"
               autoComplete={mode === "signin" ? "current-password" : "new-password"}
+              className="auth-input"
               placeholder="Password" value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && (mode === "signin" ? handleSignIn() : handleSignUp())}
