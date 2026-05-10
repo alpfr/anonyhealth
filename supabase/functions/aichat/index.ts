@@ -10,21 +10,46 @@ const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const MAX_REQUESTS_PER_WINDOW = 5;
 const ANTHROPIC_MODEL = "claude-haiku-4-5-20251001";
 
-const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ?? "")
+// ─── CORS allowlist with glob-style wildcard support ──────
+//
+// ALLOWED_ORIGINS is a comma-separated list. Entries support `*` wildcards
+// that match one DNS label or one port — never crossing "." or "/" boundaries.
+//
+//   "https://anonyhealth.opssightai.com" → exact origin
+//   "https://*.opssightai.com"           → any single subdomain
+//   "http://localhost:*"                 → any port on localhost
+//
+// An empty list denies every browser origin (server-to-server only).
+const PATTERN_SOURCES = (Deno.env.get("ALLOWED_ORIGINS") ?? "")
     .split(",")
     .map((o) => o.trim())
     .filter(Boolean);
 
+function patternToRegExp(pattern: string): RegExp {
+    // Escape every regex metacharacter (including `*`), then unescape `\*`
+    // back into `[^./]+` so a single wildcard matches one DNS label or one
+    // port — never crosses a `.` or `/` boundary.
+    const escaped = pattern.replace(/[.+?^${}()|[\]\\*]/g, "\\$&");
+    const withWildcards = escaped.replace(/\\\*/g, "[^./]+");
+    return new RegExp(`^${withWildcards}$`);
+}
+
+const ALLOWED_ORIGIN_PATTERNS = PATTERN_SOURCES.map(patternToRegExp);
+
+function isOriginAllowed(origin: string): boolean {
+    if (!origin) return false;
+    return ALLOWED_ORIGIN_PATTERNS.some((re) => re.test(origin));
+}
+
 function getCorsHeaders(req: Request): Record<string, string> {
     const origin = req.headers.get("origin") ?? "";
-    const allowed = ALLOWED_ORIGINS.includes(origin);
     const headers: Record<string, string> = {
         "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Max-Age": "600",
         "Vary": "Origin",
     };
-    if (allowed) headers["Access-Control-Allow-Origin"] = origin;
+    if (isOriginAllowed(origin)) headers["Access-Control-Allow-Origin"] = origin;
     return headers;
 }
 
@@ -79,8 +104,10 @@ serve(async (req) => {
         return jsonResponse({ error: "Method not allowed" }, 405, corsHeaders);
     }
 
+    // Reject browser requests from disallowed origins (server-to-server, where
+    // the Origin header is absent, is permitted by design).
     const origin = req.headers.get("origin") ?? "";
-    if (ALLOWED_ORIGINS.length > 0 && origin && !ALLOWED_ORIGINS.includes(origin)) {
+    if (origin && !isOriginAllowed(origin)) {
         return jsonResponse({ error: "Origin not allowed" }, 403, corsHeaders);
     }
 

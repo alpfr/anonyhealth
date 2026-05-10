@@ -1,10 +1,44 @@
 // Shared CORS helper. All client-facing functions allowlist origins via the
-// ALLOWED_ORIGINS env var (comma-separated). An empty list denies everything.
+// ALLOWED_ORIGINS env var (comma-separated).
+//
+// Origin entries support glob-style wildcards:
+//   "https://anonyhealth.opssightai.com"  → exact match
+//   "https://*.opssightai.com"            → any single subdomain label
+//   "http://localhost:*"                  → any port on localhost
+//   "https://*.preview.opssightai.com"    → any preview deploy (one label)
+//
+// `*` matches one DNS label or port — it does NOT cross "." or "/" boundaries.
+// So `https://*.opssightai.com` matches `staging.opssightai.com` but NOT
+// `a.b.opssightai.com`. Use multiple wildcards for multi-level subdomains:
+//   "https://*.*.opssightai.com"
+//
+// An empty list denies all browser origins.
 
-const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ?? "")
+const PATTERN_SOURCES = (Deno.env.get("ALLOWED_ORIGINS") ?? "")
     .split(",")
     .map((o) => o.trim())
     .filter(Boolean);
+
+function patternToRegExp(pattern: string): RegExp {
+    // 1. Escape every regex metacharacter — including `*` itself — so the
+    //    pattern is treated literally by default.
+    // 2. Then unescape `\*` back into a wildcard sub-pattern that matches
+    //    any non-empty sequence of characters that are NOT `/` or `.`.
+    //    Excluding `.` enforces single-DNS-label semantics, matching the
+    //    convention used by nginx, AWS ACM, and most edge CDNs:
+    //    `https://*.opssightai.com` matches `staging.opssightai.com` but
+    //    NOT `a.b.opssightai.com`.
+    const escaped = pattern.replace(/[.+?^${}()|[\]\\*]/g, "\\$&");
+    const withWildcards = escaped.replace(/\\\*/g, "[^./]+");
+    return new RegExp(`^${withWildcards}$`);
+}
+
+const ALLOWED_ORIGIN_PATTERNS = PATTERN_SOURCES.map(patternToRegExp);
+
+function isOriginAllowed(origin: string): boolean {
+    if (!origin) return false;
+    return ALLOWED_ORIGIN_PATTERNS.some((re) => re.test(origin));
+}
 
 export function getCorsHeaders(req: Request): Record<string, string> {
     const origin = req.headers.get("origin") ?? "";
@@ -15,7 +49,7 @@ export function getCorsHeaders(req: Request): Record<string, string> {
         "Access-Control-Max-Age": "600",
         "Vary": "Origin",
     };
-    if (ALLOWED_ORIGINS.includes(origin)) {
+    if (isOriginAllowed(origin)) {
         headers["Access-Control-Allow-Origin"] = origin;
     }
     return headers;
@@ -23,7 +57,12 @@ export function getCorsHeaders(req: Request): Record<string, string> {
 
 export function originAllowed(req: Request): boolean {
     const origin = req.headers.get("origin") ?? "";
-    return ALLOWED_ORIGINS.length === 0 || !origin || ALLOWED_ORIGINS.includes(origin);
+    // Allow same-origin / server-to-server (no Origin header) and any origin
+    // matching a configured pattern. An empty patterns list locks down to
+    // server-to-server only.
+    if (!origin) return true;
+    if (ALLOWED_ORIGIN_PATTERNS.length === 0) return false;
+    return isOriginAllowed(origin);
 }
 
 export function jsonResponse(
