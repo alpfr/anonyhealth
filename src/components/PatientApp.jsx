@@ -106,6 +106,18 @@ export const PatientApp = () => {
     setScreen(s);
   }, []);
 
+  // Listen for navigation events emitted by ProfileMenu (or any other
+  // component without a direct callback). This lets the menu route to
+  // Settings even when MobileNav is rendered deep inside a screen.
+  useEffect(() => {
+    const handler = (e) => {
+      const target = e?.detail;
+      if (typeof target === "string") setScreen(target);
+    };
+    window.addEventListener("anonyhealth:navigate", handler);
+    return () => window.removeEventListener("anonyhealth:navigate", handler);
+  }, []);
+
   const upgradeToAccount = useCallback(() => {
     // Send the user to /signup; AuthGate detects the anonymous session and
     // shows the "Save your session" copy in upgrade mode.
