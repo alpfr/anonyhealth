@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import { BottomNav } from "./BottomNav";
 import { ScreenLoader } from "./ScreenLoader";
+import { AnonymousBadge } from "./AnonymousBadge";
+import { UpgradePrompt } from "./UpgradePrompt";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
 import { useTenant } from "../context/TenantContext";
@@ -48,14 +50,24 @@ const PatientProfileSetup = lazy(() =>
 );
 
 /**
+ * Screens that require a real (non-anonymous) account.
+ * If an anonymous user navigates here, we render UpgradePrompt instead.
+ */
+const PROTECTED_SCREENS = new Set(["messages", "book"]);
+
+/**
  * PatientApp — navigation shell for patient-role users.
  *
+ * Identity tiers:
+ *   • Anonymous     → skip profile setup, allow chat/dashboard/history,
+ *                      block messages/book behind UpgradePrompt
+ *   • Patient       → existing flow, gated on patient profile
+ *
  * Single responsive column layout (max-width 480px, centered).
- * Checks for patient profile existence; shows onboarding if missing.
  */
 export const PatientApp = () => {
   const { theme, t, isDark, toggleTheme } = useTheme();
-  const { session } = useAuth();
+  const { session, isAnonymous } = useAuth();
   const { tenant } = useTenant();
   const [screen, setScreen] = useState("dashboard");
   const [chatInitialMsg, setChatInitialMsg] = useState("");
@@ -71,6 +83,11 @@ export const PatientApp = () => {
       setProfileState({ loading: false, exists: false });
       return;
     }
+    // Anonymous users don't have a patient profile by design. Skip the lookup.
+    if (isAnonymous) {
+      setProfileState({ loading: false, exists: true });
+      return;
+    }
     import("../services/patientProfile")
       .then(({ getPatientProfile }) => getPatientProfile(userId))
       .then((row) => {
@@ -82,15 +99,34 @@ export const PatientApp = () => {
     return () => {
       cancelled = true;
     };
-  }, [session?.user?.id]);
+  }, [session?.user?.id, isAnonymous]);
 
   const navigate = useCallback((s, msg) => {
     setChatInitialMsg(msg ?? "");
     setScreen(s);
   }, []);
 
+  const upgradeToAccount = useCallback(() => {
+    // Send the user to /signup; AuthGate detects the anonymous session and
+    // shows the "Save your session" copy in upgrade mode.
+    window.location.href = "/signup";
+  }, []);
+
   const renderScreen = () => {
     const props = { theme };
+
+    // Gate protected screens for anonymous users.
+    if (isAnonymous && PROTECTED_SCREENS.has(screen)) {
+      return (
+        <UpgradePrompt
+          theme={theme}
+          feature={screen === "messages" ? "message providers" : "book appointments"}
+          onUpgrade={upgradeToAccount}
+          onBack={() => setScreen("dashboard")}
+        />
+      );
+    }
+
     switch (screen) {
       case "chat":
         return (
@@ -173,6 +209,14 @@ export const PatientApp = () => {
           position: "relative",
         }}
       >
+        {/* Persistent anonymous-state badge. Hidden on chat / settings to
+            avoid double-stacking with screen chrome. */}
+        <AnonymousBadge
+          theme={theme}
+          hide={screen === "chat" || screen === "settings"}
+          onUpgrade={upgradeToAccount}
+        />
+
         <Suspense fallback={<ScreenLoader theme={theme} />}>
           <div
             style={{

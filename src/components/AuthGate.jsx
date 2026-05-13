@@ -1,29 +1,40 @@
-import { useState, useCallback, lazy, Suspense } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../supabaseClient";
 import { logAuditEvent } from "../utils/audit";
 import { isValidEmail, isStrongPassword } from "../utils/validation";
 import { Icons } from "../constants/theme";
 
-const LandingPage = lazy(() =>
-  import("../screens/LandingPage").then((m) => ({ default: m.LandingPage }))
-);
-
 /**
- * AuthGate — wraps the app in an auth wall.
+ * AuthGate — three-tier access gate.
  *
- * When there is no active session it renders one of:
- *   • The public LandingPage (if showLanding is true)
- *   • A sign-in / sign-up / OTP-verify / forgot-password form
+ * Modes (controlled by `tier` prop):
+ *   • "anonymous_ok" — auto-creates an anonymous Supabase session so the
+ *                       visitor can use AI triage immediately. Renders the
+ *                       sign-in/sign-up form only on explicit /signin or
+ *                       /signup routes.
+ *   • "required"     — gates on a real (non-anonymous) account, matching the
+ *                       pre-tiered behavior. Used for provider routes.
  *
- * Once a session exists it renders `children`.
+ * The auth form supports four modes internally: signin, signup, verify, forgot.
+ * Sign-up uses `upgradeAnonymousToAccount` so anonymous chat history carries
+ * over when a visitor decides to create a real account.
  */
 export const AuthGate = ({
   children,
   initialMode = "signin",
-  showLanding = false,
+  tier = "anonymous_ok",
 }) => {
-  const { session, loading, signIn, requestPasswordReset } = useAuth();
+  const {
+    session,
+    loading,
+    isAnonymous,
+    signIn,
+    signInAnonymously,
+    upgradeAnonymousToAccount,
+    requestPasswordReset,
+  } = useAuth();
+
   const [mode, setMode] = useState(initialMode); // signin | signup | verify | forgot
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,6 +42,33 @@ export const AuthGate = ({
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [bootstrapping, setBootstrapping] = useState(false);
+
+  const explicitAuthForm = initialMode === "signin" || initialMode === "signup";
+  // When the route is /signin or /signup the visitor explicitly asked for
+  // the auth form — don't auto-anonymize them.
+  // The "landing" mode is opt-in: a separate route or query param would
+  // set it. By default (`/` with no session) we auto-anonymize.
+  const willShowLandingFirst = false; // future use; keep landing reachable via /landing if needed
+
+  // Anonymous bootstrap: if tier allows anonymous and there's no session,
+  // create one in the background — except on explicit auth routes.
+  useEffect(() => {
+    if (loading) return;
+    if (session) return;
+    if (tier !== "anonymous_ok") return;
+    if (explicitAuthForm) return;
+    if (willShowLandingFirst) return;
+
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setBootstrapping(true);
+    signInAnonymously().finally(() => {
+       
+      if (!cancelled) setBootstrapping(false);
+    });
+    return () => { cancelled = true; };
+  }, [loading, session, tier, explicitAuthForm, willShowLandingFirst, signInAnonymously]);
 
   const resetMessages = () => {
     setError("");
@@ -38,8 +76,7 @@ export const AuthGate = ({
   };
 
   const handleForgotPassword = useCallback(async () => {
-    setError("");
-    setInfo("");
+    resetMessages();
     if (!isValidEmail(email)) {
       setError("Please enter your email.");
       return;
@@ -90,10 +127,9 @@ export const AuthGate = ({
     }
 
     setSubmitting(true);
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+    // Use the auth context's upgrade path so existing anonymous data
+    // (chat history, draft profile) carries over to the new account.
+    const { data, error: signUpError } = await upgradeAnonymousToAccount(email, password);
     setSubmitting(false);
 
     if (signUpError) {
@@ -101,21 +137,18 @@ export const AuthGate = ({
       return;
     }
 
-    // When email confirmation is enabled, Supabase returns a user with no
-    // session and emails a 6-digit OTP (if the project's confirmation email
-    // template uses {{ .Token }}). Prompt for it.
-    if (data?.session) {
-      logAuditEvent(
-        "auth.sign_up",
-        "User signed up (no confirmation required)"
-      );
-      return;
+    if (data?.session || data?.user) {
+      // If Supabase email confirmation is enabled, the user object exists
+      // but they still need to confirm. Tell them.
+      const needsVerify = !data.session;
+      if (needsVerify) {
+        setMode("verify");
+        setInfo(
+          "We sent a 6-digit code to your email. Enter it below to finish creating your account."
+        );
+      }
     }
-    setMode("verify");
-    setInfo(
-      "We sent a 6-digit code to your email. Enter it below to finish creating your account."
-    );
-  }, [email, password]);
+  }, [email, password, upgradeAnonymousToAccount]);
 
   const handleVerifyOtp = useCallback(async () => {
     resetMessages();
@@ -129,7 +162,7 @@ export const AuthGate = ({
     const { data, error: verifyError } = await supabase.auth.verifyOtp({
       email,
       token,
-      type: "signup",
+      type: isAnonymous ? "email_change" : "signup",
     });
     setSubmitting(false);
 
@@ -138,22 +171,22 @@ export const AuthGate = ({
       return;
     }
     if (data?.user) logAuditEvent("auth.sign_up", "Email OTP verified");
-  }, [email, otp]);
+  }, [email, otp, isAnonymous]);
 
   const resendOtp = useCallback(async () => {
     resetMessages();
     setSubmitting(true);
     const { error: resendError } = await supabase.auth.resend({
-      type: "signup",
+      type: isAnonymous ? "email_change" : "signup",
       email,
     });
     setSubmitting(false);
     if (resendError) setError(resendError.message);
     else setInfo("Code resent. Check your inbox.");
-  }, [email]);
+  }, [email, isAnonymous]);
 
   // ─── Render states ─────────────────────────────────────
-  if (loading) {
+  if (loading || bootstrapping) {
     return (
       <div
         style={{
@@ -170,20 +203,29 @@ export const AuthGate = ({
     );
   }
 
-  if (session) return children;
+  // For tier="required", an anonymous session does NOT satisfy the gate.
+  const sessionSatisfiesTier =
+    !!session && (tier === "anonymous_ok" || !isAnonymous);
 
-  if (showLanding) {
+  if (sessionSatisfiesTier) return children;
+
+  // No session AND we got here — show the auth form (the bootstrap effect
+  // either hasn't run yet or we're on an explicit /signin or /signup).
+  if (!session && !explicitAuthForm && tier === "anonymous_ok") {
+    // Bootstrap effect is starting — show a loader.
     return (
-      <Suspense fallback={null}>
-        <LandingPage
-          onPrimaryAction={() => {
-            window.location.href = "/signup";
-          }}
-          onSignIn={() => {
-            window.location.href = "/signin";
-          }}
-        />
-      </Suspense>
+      <div
+        style={{
+          height: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#f8fafc",
+          fontFamily: "'Outfit', sans-serif",
+        }}
+      >
+        <div style={{ fontSize: 14, color: "#64748b" }}>Starting session...</div>
+      </div>
     );
   }
 
@@ -224,6 +266,14 @@ export const AuthGate = ({
     fontWeight: 600,
     opacity: busy ? 0.7 : 1,
   });
+
+  // Determine the helper copy at the top of the form.
+  // When upgrading from anonymous, we use slightly different language.
+  const upgrading = isAnonymous;
+  const signUpHeading = upgrading ? "Save your session" : "Create provider account";
+  const signUpHelper = upgrading
+    ? "Create an account to save your triage history, book appointments, and message providers."
+    : "For healthcare providers. Patients join through an invite link from their provider.";
 
   return (
     <div
@@ -296,8 +346,7 @@ export const AuthGate = ({
                 lineHeight: 1.5,
               }}
             >
-              For healthcare providers. Patients join through an invite link
-              from their provider.
+              {mode === "signup" ? signUpHelper : "Sign in to continue."}
             </p>
             <div
               style={{
@@ -323,7 +372,7 @@ export const AuthGate = ({
                   ...(mode === "signin" ? activeTabStyle : inactiveTabStyle),
                 }}
               >
-                Provider sign in
+                Sign in
               </button>
               <button
                 type="button"
@@ -341,7 +390,7 @@ export const AuthGate = ({
                   ...(mode === "signup" ? activeTabStyle : inactiveTabStyle),
                 }}
               >
-                Sign up as provider
+                {upgrading ? "Save session" : "Sign up"}
               </button>
             </div>
           </>
@@ -578,7 +627,7 @@ export const AuthGate = ({
                   : "Creating account..."
                 : mode === "signin"
                   ? "Sign In"
-                  : "Create provider account"}
+                  : signUpHeading}
             </button>
 
             {mode === "signin" && (
@@ -602,17 +651,31 @@ export const AuthGate = ({
               </button>
             )}
 
-            <div
-              style={{
-                marginTop: 20,
-                paddingTop: 16,
-                borderTop: "1px solid #e2e8f0",
-                fontSize: 12,
-                color: "#64748b",
-              }}
-            >
-              Patient with an invite? Open the link your provider sent you.
-            </div>
+            {/* Anonymous escape hatch — let the visitor browse without an account */}
+            {tier === "anonymous_ok" && !session && (
+              <button
+                type="button"
+                onClick={async () => {
+                  await signInAnonymously();
+                  window.location.href = "/";
+                }}
+                style={{
+                  marginTop: 16,
+                  paddingTop: 16,
+                  borderTop: "1px solid #e2e8f0",
+                  background: "none",
+                  border: "none",
+                  borderTopColor: "#e2e8f0",
+                  color: "#0f172a",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  width: "100%",
+                }}
+              >
+                Continue anonymously →
+              </button>
+            )}
           </>
         )}
 

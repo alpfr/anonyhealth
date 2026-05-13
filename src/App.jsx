@@ -19,6 +19,9 @@ const ResetPasswordPage = lazy(() =>
     default: m.ResetPasswordPage,
   }))
 );
+const LandingPage = lazy(() =>
+  import("./screens/LandingPage").then((m) => ({ default: m.LandingPage }))
+);
 
 // ─── Invite route (public, bypasses auth + tenant gates) ─
 function InviteRoute({ token }) {
@@ -64,12 +67,35 @@ export default function AnonyHealthApp() {
     );
   }
 
-  // Main app: AuthGate → TenantGate → PatientApp (or DoctorApp via TenantGate)
+  // Provider marketing landing page — opt-in via /for-providers.
+  if (route.kind === "landing") {
+    return (
+      <Suspense fallback={null}>
+        <LandingPage
+          onPrimaryAction={() => { window.location.href = "/signup"; }}
+          onSignIn={() => { window.location.href = "/signin"; }}
+        />
+      </Suspense>
+    );
+  }
+
+  // Main app: AuthGate → TenantGate → PatientApp (or DoctorApp via TenantGate).
+  //
+  // Tier rules:
+  //   • /signin, /signup     → show the auth form (tier still allows anonymous,
+  //                             but explicit-auth-form takes precedence)
+  //   • everywhere else      → "anonymous_ok" — visitors get a Supabase
+  //                             anonymous session and can use AI triage
+  //                             immediately. Provider-only screens are still
+  //                             protected inside TenantGate / PatientApp.
   const isAuthRoute = route.kind === "auth";
   const initialMode = isAuthRoute ? route.mode : "signin";
 
   return (
-    <AuthGate initialMode={initialMode} showLanding={!isAuthRoute}>
+    <AuthGate
+      initialMode={initialMode}
+      tier="anonymous_ok"
+    >
       <TenantGate route={route}>
         <PatientApp />
       </TenantGate>
