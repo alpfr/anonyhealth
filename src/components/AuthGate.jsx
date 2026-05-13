@@ -36,6 +36,14 @@ export const AuthGate = ({
   } = useAuth();
 
   const [mode, setMode] = useState(initialMode); // signin | signup | verify | forgot
+  // Audience selector — patient vs provider — controls helper copy and
+  // secondary CTAs. The form fields and backend logic are identical for
+  // both; the role only affects which conversion path makes sense.
+  // Persisted in sessionStorage so it survives the tab refresh after sign-up.
+  const [role, setRole] = useState(() => {
+    if (typeof window === "undefined") return "patient";
+    return sessionStorage.getItem("anonyhealth.signinRole") || "patient";
+  });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
@@ -43,6 +51,15 @@ export const AuthGate = ({
   const [info, setInfo] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [bootstrapping, setBootstrapping] = useState(false);
+
+  const updateRole = (next) => {
+    setRole(next);
+    try {
+      sessionStorage.setItem("anonyhealth.signinRole", next);
+    } catch {
+      /* sessionStorage unavailable — non-fatal */
+    }
+  };
 
   const explicitAuthForm = initialMode === "signin" || initialMode === "signup";
   // When the route is /signin or /signup the visitor explicitly asked for
@@ -64,7 +81,6 @@ export const AuthGate = ({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setBootstrapping(true);
     signInAnonymously().finally(() => {
-       
       if (!cancelled) setBootstrapping(false);
     });
     return () => { cancelled = true; };
@@ -268,12 +284,27 @@ export const AuthGate = ({
   });
 
   // Determine the helper copy at the top of the form.
-  // When upgrading from anonymous, we use slightly different language.
+  // Two axes influence the copy:
+  //   • upgrading — true if the visitor has an active anonymous session
+  //   • role — patient vs provider (selected via the audience toggle)
   const upgrading = isAnonymous;
-  const signUpHeading = upgrading ? "Save your session" : "Create provider account";
+  const isProviderRole = role === "provider";
+
+  const signUpHeading = upgrading
+    ? "Save your session"
+    : isProviderRole
+      ? "Create provider account"
+      : "Create your account";
+
   const signUpHelper = upgrading
     ? "Create an account to save your triage history, book appointments, and message providers."
-    : "For healthcare providers. Patients join through an invite link from their provider.";
+    : isProviderRole
+      ? "Healthcare providers: create your practice and invite your patients."
+      : "Patients normally join through an invite link from their provider. If you have a link, open it now.";
+
+  const signInHelper = isProviderRole
+    ? "Sign in to your provider dashboard."
+    : "Sign in to access your saved triage history and appointments.";
 
   return (
     <div
@@ -337,6 +368,68 @@ export const AuthGate = ({
 
         {mode !== "verify" && mode !== "forgot" && (
           <>
+            {/* Audience selector — patient vs provider. Hidden when upgrading
+                from an anonymous session (the visitor's intent is implicit). */}
+            {!upgrading && (
+              <div
+                role="tablist"
+                aria-label="I am a"
+                style={{
+                  display: "flex",
+                  gap: 4,
+                  padding: 4,
+                  borderRadius: 12,
+                  background: "#f1f5f9",
+                  marginBottom: 16,
+                }}
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={role === "patient"}
+                  onClick={() => updateRole("patient")}
+                  style={{
+                    flex: 1,
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    fontFamily: "'Outfit', sans-serif",
+                    background: role === "patient" ? "#fff" : "transparent",
+                    color: role === "patient" ? "#0f172a" : "#64748b",
+                    boxShadow: role === "patient" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  I'm a patient
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={role === "provider"}
+                  onClick={() => updateRole("provider")}
+                  style={{
+                    flex: 1,
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    fontFamily: "'Outfit', sans-serif",
+                    background: role === "provider" ? "#fff" : "transparent",
+                    color: role === "provider" ? "#0f172a" : "#64748b",
+                    boxShadow: role === "provider" ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  I'm a provider
+                </button>
+              </div>
+            )}
+
             <p
               style={{
                 fontSize: 12,
@@ -346,7 +439,7 @@ export const AuthGate = ({
                 lineHeight: 1.5,
               }}
             >
-              {mode === "signup" ? signUpHelper : "Sign in to continue."}
+              {mode === "signup" ? signUpHelper : signInHelper}
             </p>
             <div
               style={{
@@ -651,8 +744,10 @@ export const AuthGate = ({
               </button>
             )}
 
-            {/* Anonymous escape hatch — let the visitor browse without an account */}
-            {tier === "anonymous_ok" && !session && (
+            {/* Anonymous escape hatch — let patient visitors browse without
+                an account. Hidden for providers (they have no use case for
+                anonymous mode). */}
+            {tier === "anonymous_ok" && !session && !isProviderRole && (
               <button
                 type="button"
                 onClick={async () => {
@@ -675,6 +770,25 @@ export const AuthGate = ({
               >
                 Continue anonymously →
               </button>
+            )}
+
+            {/* Provider-specific helper link. */}
+            {isProviderRole && mode === "signin" && (
+              <a
+                href="/for-providers"
+                style={{
+                  display: "block",
+                  marginTop: 16,
+                  paddingTop: 16,
+                  borderTop: "1px solid #e2e8f0",
+                  color: "#64748b",
+                  fontSize: 12,
+                  textDecoration: "none",
+                  textAlign: "center",
+                }}
+              >
+                What is AnonyHealth for providers? →
+              </a>
             )}
           </>
         )}
