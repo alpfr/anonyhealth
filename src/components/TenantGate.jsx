@@ -1,5 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import { useTheme } from "../context/ThemeContext";
+import { useAuth } from "../context/AuthContext";
 import { useTenant } from "../context/TenantContext";
 import { callFunction } from "../utils/functions";
 import { ScreenLoader } from "./ScreenLoader";
@@ -19,15 +20,22 @@ const DoctorApp = lazy(() =>
 );
 
 /**
- * TenantGate — routes users based on membership, role, and subscription status.
+ * TenantGate — routes users based on identity tier and membership.
  *
- * • No membership → DoctorOnboardingMobile (create a practice)
- * • Doctor without active subscription → BillingInactiveMobile
- * • Doctor with active subscription → DoctorApp
- * • Patient (or any other role) → children (PatientApp)
+ * Order of precedence:
+ *   1. Anonymous user                  → children (PatientApp, no tenant context)
+ *   2. No membership                   → DoctorOnboardingMobile
+ *   3. Doctor without subscription     → BillingInactiveMobile
+ *   4. Doctor with active subscription → DoctorApp
+ *   5. Patient (everyone else)         → children (PatientApp)
+ *
+ * Anonymous users skip tenant gating entirely. They get a temporary identity
+ * for AI triage and provider browsing; when they convert to a real account
+ * they're routed through the normal tenant flow.
  */
 export const TenantGate = ({ children, route }) => {
   const { theme } = useTheme();
+  const { isAnonymous } = useAuth();
   const {
     loading,
     membership,
@@ -41,9 +49,7 @@ export const TenantGate = ({ children, route }) => {
   );
 
   // After Stripe redirects back, pull the subscription state from Stripe via
-  // the sync-subscription Edge Function (primary) and refresh the tenant
-  // context. Webhooks remain a future enhancement; this guarantees the
-  // user sees their active trial without depending on real-time delivery.
+  // the sync-subscription Edge Function and refresh the tenant context.
   useEffect(() => {
     if (!postCheckout) return;
     if (hasActiveSubscription) {
@@ -72,6 +78,11 @@ export const TenantGate = ({ children, route }) => {
 
   if (loading || postCheckout) {
     return <ScreenLoader theme={theme} />;
+  }
+
+  // Anonymous users bypass all tenant gating — they're patients-in-waiting.
+  if (isAnonymous) {
+    return children;
   }
 
   // Doctor path: no tenant yet → onboarding
