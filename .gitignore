@@ -27,3 +27,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Playwright test outputs
+/playwright-report/
+/test-results/
+/playwright/.cache/
+
+# Supabase CLI cache
+supabase/.temp/
