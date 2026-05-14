@@ -81,6 +81,7 @@ export const AuthGate = ({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setBootstrapping(true);
     signInAnonymously().finally(() => {
+
       if (!cancelled) setBootstrapping(false);
     });
     return () => { cancelled = true; };

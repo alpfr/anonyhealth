@@ -118,6 +118,7 @@ export const PatientApp = () => {
     return () => window.removeEventListener("anonyhealth:navigate", handler);
   }, []);
 
+
   const upgradeToAccount = useCallback(() => {
     // Send the user to /signup; AuthGate detects the anonymous session and
     // shows the "Save your session" copy in upgrade mode.
