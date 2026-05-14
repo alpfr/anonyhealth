@@ -1,37 +1,93 @@
 name: Deploy to Production
 
 # Triggers:
-#   • push to main      — production deploy
-#   • workflow_dispatch — manual deploy from the Actions tab
+#   • push to main      — runs tests, then production deploy
+#   • workflow_dispatch — manual deploy (also runs tests)
 #
 # Required secrets (configure in GitHub → Settings → Secrets → Actions):
-#   GCP_PROJECT_ID   — e.g. alpfr-splunk-integration
-#   GCP_SA_KEY       — JSON key for the deploy service account
+#   GCP_PROJECT_ID         — e.g. alpfr-splunk-integration
+#   GCP_SA_KEY             — JSON key for the deploy service account
+#   VITE_SUPABASE_URL      — used at build time during tests
+#   VITE_SUPABASE_ANON_KEY — used at build time during tests
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
-# Let an in-flight deploy finish before starting another. Avoids half-deployed state.
 concurrency:
   group: production-deploy
   cancel-in-progress: false
 
 jobs:
+  # ──────────────────────────────────────────────
+  # Gate: run tests before deploying.
+  # If tests fail, the deploy job won't run.
+  # ──────────────────────────────────────────────
+  test:
+    name: Lint & Playwright
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright browsers
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Install Playwright system deps
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium webkit
+
+      - name: Build app
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: npm run build
+
+      - name: Run Playwright tests
+        env:
+          CI: true
+        run: npx playwright test
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: playwright-report/
+          retention-days: 14
+
+  # ──────────────────────────────────────────────
+  # Deploy — only runs if `test` job succeeded.
+  # ──────────────────────────────────────────────
   deploy:
     name: Build & deploy to GKE
+    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
-      - name: Check out repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # ──────────────────────────────────────────────
-      # Auth to GCP via JSON service account key.
-      # To upgrade to Workload Identity Federation later, swap this step.
-      # ──────────────────────────────────────────────
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -42,11 +98,6 @@ jobs:
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-      # ──────────────────────────────────────────────
-      # Build & deploy via Cloud Build.
-      # cloudbuild.yaml drives the full pipeline: Docker build → Artifact
-      # Registry push → GKE deployment update.
-      # ──────────────────────────────────────────────
       - name: Submit Cloud Build
         id: build
         run: |
@@ -57,11 +108,7 @@ jobs:
             --quiet)
           echo "build_id=${BUILD_ID}" >> "$GITHUB_OUTPUT"
           echo "Build ID: ${BUILD_ID}"
-          echo "Logs: https://console.cloud.google.com/cloud-build/builds/${BUILD_ID}?project=${{ secrets.GCP_PROJECT_ID }}"
 
-      # ──────────────────────────────────────────────
-      # Verify the rollout — fetch GKE creds, run verification script.
-      # ──────────────────────────────────────────────
       - name: Install GKE auth plugin
         run: gcloud components install gke-gcloud-auth-plugin --quiet
 
@@ -81,9 +128,6 @@ jobs:
           chmod +x ./scripts/verify-deployment.sh
           ./scripts/verify-deployment.sh
 
-      # ──────────────────────────────────────────────
-      # Summary line for the run page.
-      # ──────────────────────────────────────────────
       - name: Annotate run summary
         if: always()
         run: |
