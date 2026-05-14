@@ -1,0 +1,115 @@
+name: Deploy to Production
+
+# Triggers:
+#   • push to main      — production deploy
+#   • workflow_dispatch — manual deploy from the Actions tab
+#
+# Required secrets (configure in GitHub → Settings → Secrets → Actions):
+#   GCP_PROJECT_ID        — e.g. alpfr-splunk-integration
+#   GCP_SERVICE_ACCOUNT   — e.g. github-actions@alpfr-splunk-integration.iam.gserviceaccount.com
+#   GCP_WORKLOAD_IDP      — workload identity provider resource name
+#                            (preferred over GCP_SA_KEY for security)
+#   GCP_SA_KEY            — JSON key for the service account
+#                            (fallback if not using workload identity)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel any in-flight deploy when a newer push arrives. Avoids racing
+# two builds onto the same GKE cluster.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false   # let in-flight finish to avoid half-deployed state
+
+jobs:
+  deploy:
+    name: Build & deploy to GKE
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Needed for Workload Identity Federation (no static keys).
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      # ──────────────────────────────────────────────
+      # Auth to GCP — prefer Workload Identity, fall back to JSON key.
+      # ──────────────────────────────────────────────
+      - name: Authenticate to Google Cloud (Workload Identity)
+        if: ${{ vars.GCP_WORKLOAD_IDP != '' || secrets.GCP_WORKLOAD_IDP != '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDP }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Authenticate to Google Cloud (Service Account Key)
+        if: ${{ vars.GCP_WORKLOAD_IDP == '' && secrets.GCP_WORKLOAD_IDP == '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      # ──────────────────────────────────────────────
+      # Build & deploy via Cloud Build.
+      # cloudbuild.yaml handles: Docker build → Artifact Registry push →
+      # GKE deployment update. The full pipeline runs inside Cloud Build,
+      # not this runner — keeping this workflow simple and reusing the
+      # existing config.
+      # ──────────────────────────────────────────────
+      - name: Submit Cloud Build
+        id: build
+        run: |
+          BUILD_ID=$(gcloud builds submit \
+            --config cloudbuild.yaml \
+            --format='value(id)' \
+            --quiet 2>&1 | tee /tmp/build.log | tail -1)
+          echo "build_id=${BUILD_ID}" >> "$GITHUB_OUTPUT"
+          echo "Build ID: ${BUILD_ID}"
+          echo "Logs: https://console.cloud.google.com/cloud-build/builds/${BUILD_ID}?project=${{ secrets.GCP_PROJECT_ID }}"
+
+      # ──────────────────────────────────────────────
+      # Verify the rollout — fetch GKE creds, run verification script.
+      # ──────────────────────────────────────────────
+      - name: Install GKE auth plugin
+        run: |
+          gcloud components install gke-gcloud-auth-plugin --quiet
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials opssightai-cluster \
+            --zone us-central1-a \
+            --project ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/anonyhealth --timeout=5m
+
+      - name: Run verification script
+        env:
+          GCP_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          chmod +x ./scripts/verify-deployment.sh
+          ./scripts/verify-deployment.sh
+
+      # ──────────────────────────────────────────────
+      # Summary line for the run page.
+      # ──────────────────────────────────────────────
+      - name: Annotate run summary
+        if: always()
+        run: |
+          echo "## Deployment Result" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build ID**: \`${{ steps.build.outputs.build_id }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build logs**: https://console.cloud.google.com/cloud-build/builds/${{ steps.build.outputs.build_id }}?project=${{ secrets.GCP_PROJECT_ID }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Production URL**: https://anonyhealth.opssightai.com" >> $GITHUB_STEP_SUMMARY
