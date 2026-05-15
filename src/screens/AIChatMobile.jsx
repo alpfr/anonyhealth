@@ -5,75 +5,230 @@ import { MobileNav } from "../components/MobileNav";
 import { sanitizeChatMessage } from "../utils/validation";
 import { insertHealthLog } from "../services/healthLogs";
 import { useTenant } from "../context/TenantContext";
+import { useAuth } from "../context/AuthContext";
 import { getProviderProfile } from "../services/providerProfile";
 
 const ensureHttps = (u) => (u && /^https?:\/\//i.test(u) ? u : u ? `https://${u}` : null);
 
 // ═══════════════════════════════════════════════════════════
-// SCREEN: AI CHAT (MOBILE)
+// Multi-agent AI Chat
+//
+// Conversation flow:
+//   1. User → Intake Agent (multi-turn). Intake gathers symptoms,
+//      asks one focused question per turn.
+//   2. When Intake says "<complete/>", the frontend silently calls the
+//      Triage Agent with the full conversation history.
+//   3. Triage produces a final assessment with structured metadata that
+//      gets logged to health_logs.
+//
+// Each AI message is labeled with the agent that produced it ("Intake" or
+// "Triage") so the multi-agent architecture is visible to the user.
 // ═══════════════════════════════════════════════════════════
+
+const COMPLETE_MARKER = /<complete\s*\/?>/i;
+
+/**
+ * Stream a Server-Sent Events response from a Supabase function. Returns
+ * the full assembled text. The `onDelta` callback is invoked with each
+ * new chunk so the UI can render incrementally.
+ */
+async function streamSseResponse(response, onDelta) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let fullText = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+
+    const chunk = decoder.decode(value, { stream: true });
+    const lines = chunk.split("\n");
+
+    for (const line of lines) {
+      if (!line.startsWith("data: ") || line.trim() === "data: [DONE]") continue;
+      try {
+        const data = JSON.parse(line.slice(6));
+        if (data.type === "content_block_delta" && data.delta?.text) {
+          fullText += data.delta.text;
+          onDelta(fullText);
+        }
+      } catch {
+        // Malformed SSE chunk — skip.
+      }
+    }
+  }
+  return fullText;
+}
+
+/**
+ * Strip control markers (<complete/>, <metadata>...</metadata>) from text
+ * before it's shown to the user. Returns the cleaned text for display.
+ */
+function cleanForDisplay(text) {
+  let cleaned = text.replace(COMPLETE_MARKER, "").trim();
+  if (cleaned.includes("<metadata>")) {
+    cleaned = cleaned.split("<metadata>")[0].trim();
+  }
+  return cleaned;
+}
+
 export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
   const t = T[theme];
+  const isDark = theme === "dark";
   const { tenant } = useTenant();
+  const { isAnonymous } = useAuth();
   const [bookingUrl, setBookingUrl] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     if (!tenant?.id) return;
     getProviderProfile(tenant.id)
-      .then((p) => { if (!cancelled) setBookingUrl(ensureHttps(p?.scheduling_url)); })
-      .catch(() => { /* non-fatal */ });
+      .then((p) => {
+        if (!cancelled) setBookingUrl(ensureHttps(p?.scheduling_url));
+      })
+      .catch(() => {/* non-fatal */});
     return () => { cancelled = true; };
   }, [tenant?.id]);
-  const [msgs, setMsgs] = useState(initialMsg ? [{ role: "user", text: initialMsg }] : []);
+
+  // Each message has: { role: "user" | "bot", text, agent?: "intake" | "triage" }
+  const [msgs, setMsgs] = useState(
+    initialMsg ? [{ role: "user", text: initialMsg }] : []
+  );
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
+  // Tracks which agent is producing the next bot response (for the typing label).
+  const [currentAgent, setCurrentAgent] = useState("intake");
+  // Once the triage assessment has been delivered we lock further user input.
+  const [triageDone, setTriageDone] = useState(false);
   const chatRef = useRef(null);
   const abortRef = useRef(null);
-  const isDark = theme === "dark";
 
-  // Intentionally only runs on mount with initialMsg — not on every handleSend/msgs change
   useEffect(() => {
     if (initialMsg && msgs.length === 1 && msgs[0].role === "user") {
       handleSend(initialMsg, true);
     }
-  }, [initialMsg]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialMsg]);
 
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
   }, [msgs, typing]);
 
-  // Cleanup: abort any in-flight request when component unmounts
   useEffect(() => {
-    return () => {
-      if (abortRef.current) {
-        abortRef.current.abort();
-      }
-    };
+    return () => { abortRef.current?.abort(); };
   }, []);
 
+  /**
+   * Call /triage with the full conversation history. Streams the response
+   * into a new bot message, then parses the final metadata for logging.
+   */
+  const callTriageAgent = useCallback(async (historyForTriage, session) => {
+    setCurrentAgent("triage");
+    setTyping(true);
+
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/triage`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ history: historyForTriage }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        throw new Error(
+          res.status === 429
+            ? "Triage is rate-limited. Please wait a minute."
+            : "Triage service unavailable."
+        );
+      }
+
+      setTyping(false);
+      // Push an empty triage message that we'll fill via streaming.
+      setMsgs((prev) => [...prev, { role: "bot", text: "", agent: "triage" }]);
+
+      const fullText = await streamSseResponse(res, (assembled) => {
+        const display = cleanForDisplay(assembled);
+        setMsgs((prev) => {
+          const next = [...prev];
+          next[next.length - 1] = { ...next[next.length - 1], text: display };
+          return next;
+        });
+      });
+
+      // Parse the metadata tag and log to health history.
+      if (fullText.includes("<metadata>") && session?.user && tenant?.id) {
+        try {
+          const metaStr = fullText
+            .split("<metadata>")[1]
+            ?.replace("</metadata>", "")
+            ?.trim();
+          const meta = JSON.parse(metaStr);
+          if (meta.severity) {
+            await insertHealthLog(session.user.id, tenant.id, {
+              symptom: meta.symptom,
+              severity: meta.severity,
+              ai_advice: cleanForDisplay(fullText),
+              // Future: persist urgency + next_steps once the column exists.
+            });
+          }
+        } catch (parseErr) {
+          console.error("Triage metadata parse error", parseErr);
+        }
+      }
+      setTriageDone(true);
+    } catch (err) {
+      if (err.name === "AbortError") return;
+      console.error("Triage error:", err);
+      setTyping(false);
+      setMsgs((prev) => [
+        ...prev,
+        {
+          role: "bot",
+          agent: "triage",
+          text: err.message || "Couldn't run triage assessment. Please try again.",
+        },
+      ]);
+    }
+  }, [tenant?.id]);
+
   const handleSend = useCallback(async (textOverride = null, skipUserAdd = false) => {
+    if (triageDone) return; // Conversation has ended.
+
     const raw = textOverride || input;
     const textToSend = sanitizeChatMessage(raw);
     if (!textToSend) return;
 
     if (textToSend.length > 2000) {
-      setMsgs(prev => [...prev, { role: "bot", text: "Please keep your message under 2000 characters." }]);
+      setMsgs((prev) => [
+        ...prev,
+        { role: "bot", agent: "intake", text: "Please keep your message under 2000 characters." },
+      ]);
       return;
     }
 
+    // Build the message list as it'll appear AFTER this user turn is added,
+    // because both UI state and Intake API need to see this turn.
+    const newUserMsg = { role: "user", text: textToSend };
+    const baseMsgs = skipUserAdd ? msgs : [...msgs, newUserMsg];
+
     if (!skipUserAdd) {
-      setMsgs(prev => [...prev, { role: "user", text: textToSend }]);
+      setMsgs((prev) => [...prev, newUserMsg]);
       setInput("");
     }
 
-    // Abort any previous in-flight request
-    if (abortRef.current) {
-      abortRef.current.abort();
-    }
+    abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
+    setCurrentAgent("intake");
     setTyping(true);
 
     try {
@@ -83,101 +238,101 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
         throw new Error("Please sign in to use AI chat.");
       }
 
-      const res = await fetch(`${supabaseUrl}/functions/v1/aichat`, {
+      // Convert UI msgs (excluding the brand-new user turn) into the API's
+      // expected role/content format for the Intake endpoint.
+      const history = baseMsgs
+        .slice(0, -1) // exclude the message we're about to send
+        .map((m) => ({
+          role: m.role === "user" ? "user" : "assistant",
+          content: m.text,
+        }))
+        .filter((m) => m.content && m.content.length > 0);
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/intake`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ message: textToSend }),
+        body: JSON.stringify({ message: textToSend, history }),
         signal: controller.signal,
       });
 
       if (!res.ok) {
         const status = res.status;
         if (status === 401) throw new Error("Your session has expired. Please sign in again.");
-        if (status === 429) throw new Error("Too many requests. Please wait a moment and try again.");
-        if (status >= 500) throw new Error("AI service is temporarily unavailable. Please try again later.");
+        if (status === 429) throw new Error("Too many requests. Please wait a moment.");
+        if (status >= 500) throw new Error("AI service is temporarily unavailable.");
         throw new Error("Failed to connect to AI service.");
       }
 
       setTyping(false);
-      setMsgs(prev => [...prev, { role: "bot", text: "" }]);
+      setMsgs((prev) => [...prev, { role: "bot", text: "", agent: "intake" }]);
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      let fullText = "";
+      const fullText = await streamSseResponse(res, (assembled) => {
+        const display = cleanForDisplay(assembled);
+        setMsgs((prev) => {
+          const next = [...prev];
+          next[next.length - 1] = { ...next[next.length - 1], text: display };
+          return next;
+        });
+      });
 
-      while (!done) {
-        const { value, done: readerDone } = await reader.read();
-        done = readerDone;
-        if (value) {
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n');
-          for (const line of lines) {
-            if (line.startsWith('data: ') && line.trim() !== 'data: [DONE]') {
-              try {
-                const data = JSON.parse(line.slice(6));
-                if (data.type === 'content_block_delta' && data.delta?.text) {
-                  fullText += data.delta.text;
-                  let display = fullText;
-                  if (display.includes('<metadata>')) {
-                    display = display.split('<metadata>')[0].trim();
-                  }
-
-                  setMsgs(prev => {
-                    const newMsgs = [...prev];
-                    newMsgs[newMsgs.length - 1] = { ...newMsgs[newMsgs.length - 1], text: display };
-                    return newMsgs;
-                  });
-                }
-              } catch {
-                // Skip malformed SSE chunks
-              }
-            }
-          }
-        }
+      // Did Intake signal it's done? If so, kick off triage with the full
+      // transcript (including this just-completed intake turn).
+      if (COMPLETE_MARKER.test(fullText)) {
+        // Use the latest msgs state when building the transcript for triage.
+        const transcript = [
+          ...baseMsgs.map((m) => ({
+            role: m.role === "user" ? "user" : "assistant",
+            content: m.text,
+          })),
+          {
+            role: "assistant",
+            content: fullText.replace(COMPLETE_MARKER, "").trim(),
+          },
+        ];
+        await callTriageAgent(transcript, session);
       }
-
-      // Log to history if severity is present in the streamed metadata
-      if (fullText.includes('<metadata>') && session?.user && tenant?.id) {
-        try {
-          const metaStr = fullText.split('<metadata>')[1]?.replace('</metadata>', '');
-          const aiResponse = JSON.parse(metaStr);
-          if (aiResponse.severity) {
-            await insertHealthLog(session.user.id, tenant.id, {
-              symptom: aiResponse.symptom,
-              severity: aiResponse.severity,
-              ai_advice: fullText.split('<metadata>')[0].trim(),
-            });
-          }
-        } catch(parseErr) {
-          console.error("Meta parse error", parseErr);
-        }
-      }
-
     } catch (err) {
-      if (err.name === "AbortError") return; // User cancelled, don't show error
-      console.error("AI Error:", err);
-      setMsgs(prev => [...prev, { role: "bot", text: err.message || "I'm having trouble connecting to the AI service. Please try again in a moment." }]);
+      if (err.name === "AbortError") return;
+      console.error("Intake error:", err);
+      setMsgs((prev) => [
+        ...prev,
+        {
+          role: "bot",
+          agent: "intake",
+          text: err.message || "I'm having trouble connecting. Please try again in a moment.",
+        },
+      ]);
       setTyping(false);
     }
-  }, [input, tenant?.id]);
+  }, [input, msgs, triageDone, callTriageAgent]);
+
+  // ─── UI helpers ────────────────────────────────────────
+  const agentLabel = (agent) =>
+    agent === "triage" ? "Triage Agent" : "Intake Agent";
+
+  const agentColor = (agent) =>
+    agent === "triage" ? t.warn : t.accent;
 
   return (
     <>
-      <MobileNav theme={theme} onBack={onBack} rightAction={
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          {Icons.lock(t.success, 13)}
-          <span style={{ fontSize: 11, fontWeight: 600, color: t.success, fontFamily: "'Outfit', sans-serif" }}>Encrypted</span>
-        </div>
-      } />
+      <MobileNav
+        theme={theme}
+        onBack={onBack}
+        rightAction={
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            {Icons.lock(t.success, 13)}
+            <span style={{ fontSize: 11, fontWeight: 600, color: t.success, fontFamily: "'Outfit', sans-serif" }}>
+              Encrypted
+            </span>
+          </div>
+        }
+      />
       <div ref={chatRef} style={{ flex: 1, overflowY: "auto", padding: "16px 16px 8px", display: "flex", flexDirection: "column", gap: 10 }}>
         {/* AI header */}
-        <div style={{
-          textAlign: "center", padding: "12px 0 16px", borderBottom: `1px solid ${t.border}`, marginBottom: 8,
-        }}>
+        <div style={{ textAlign: "center", padding: "12px 0 16px", borderBottom: `1px solid ${t.border}`, marginBottom: 8 }}>
           <div style={{
             width: 44, height: 44, borderRadius: 14, background: t.gradient, margin: "0 auto 8px",
             display: "flex", alignItems: "center", justifyContent: "center",
@@ -185,8 +340,12 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
           }}>
             {Icons.bot("#fff")}
           </div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: t.text, fontFamily: "'Outfit', sans-serif" }}>AI Triage Assistant</div>
-          <div style={{ fontSize: 11.5, color: t.textMut, fontFamily: "'Outfit', sans-serif", marginTop: 2 }}>Confidential session</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: t.text, fontFamily: "'Outfit', sans-serif" }}>
+            AI Triage Assistant
+          </div>
+          <div style={{ fontSize: 11.5, color: t.textMut, fontFamily: "'Outfit', sans-serif", marginTop: 2 }}>
+            Multi-agent · Confidential
+          </div>
         </div>
 
         {msgs.length === 0 && (
@@ -195,32 +354,91 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
           </div>
         )}
 
-        {msgs.map((msg, i) => (
-          <div key={i} style={{
-            display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
-            animation: "chatIn 0.35s ease-out",
-          }}>
-            <div style={{
-              maxWidth: "82%", padding: "11px 15px",
-              borderRadius: msg.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-              background: msg.role === "user" ? t.accent : t.bgCard,
-              color: msg.role === "user" ? "#fff" : t.text,
-              fontSize: 14, lineHeight: 1.55, fontFamily: "'Outfit', sans-serif",
-              border: msg.role === "user" ? "none" : `1px solid ${t.border}`,
-              boxShadow: msg.role === "user" ? (isDark ? `0 2px 12px ${t.accent}30` : `0 2px 8px ${t.accent}15`) : "none",
+        {msgs.map((msg, i) => {
+          const isBot = msg.role === "bot";
+          // Show the agent label above each bot message, but suppress
+          // consecutive duplicate labels for a cleaner thread.
+          const prevAgent =
+            i > 0 && msgs[i - 1].role === "bot" ? msgs[i - 1].agent : null;
+          const showAgentLabel = isBot && msg.agent && msg.agent !== prevAgent;
+
+          return (
+            <div key={i} style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: isBot ? "flex-start" : "flex-end",
+              animation: "chatIn 0.35s ease-out",
             }}>
-              {msg.text}
+              {showAgentLabel && (
+                <div style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: agentColor(msg.agent),
+                  fontFamily: "'Outfit', sans-serif",
+                  marginBottom: 4,
+                  paddingLeft: 4,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}>
+                  <span style={{
+                    width: 6, height: 6, borderRadius: "50%",
+                    background: agentColor(msg.agent),
+                    display: "inline-block",
+                  }} />
+                  {agentLabel(msg.agent)}
+                </div>
+              )}
+              <div style={{
+                maxWidth: "82%",
+                padding: "11px 15px",
+                borderRadius: msg.role === "user"
+                  ? "16px 16px 4px 16px"
+                  : "16px 16px 16px 4px",
+                background: msg.role === "user" ? t.accent : t.bgCard,
+                color: msg.role === "user" ? "#fff" : t.text,
+                fontSize: 14, lineHeight: 1.55, fontFamily: "'Outfit', sans-serif",
+                border: msg.role === "user" ? "none" : `1px solid ${t.border}`,
+                boxShadow: msg.role === "user"
+                  ? (isDark ? `0 2px 12px ${t.accent}30` : `0 2px 8px ${t.accent}15`)
+                  : "none",
+                whiteSpace: "pre-wrap",
+              }}>
+                {msg.text}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
+
         {typing && (
-          <div style={{ display: "flex" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
             <div style={{
-              padding: "12px 18px", borderRadius: "16px 16px 16px 4px",
-              background: t.bgCard, border: `1px solid ${t.border}`,
+              fontSize: 11,
+              fontWeight: 600,
+              color: agentColor(currentAgent),
+              fontFamily: "'Outfit', sans-serif",
+              marginBottom: 4,
+              paddingLeft: 4,
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+            }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: "50%",
+                background: agentColor(currentAgent),
+                display: "inline-block",
+                animation: "dotPulse 1.4s infinite ease-in-out",
+              }} />
+              {agentLabel(currentAgent)} is typing…
+            </div>
+            <div style={{
+              padding: "12px 18px",
+              borderRadius: "16px 16px 16px 4px",
+              background: t.bgCard,
+              border: `1px solid ${t.border}`,
               display: "flex", gap: 5,
             }}>
-              {[0, 1, 2].map(j => (
+              {[0, 1, 2].map((j) => (
                 <div key={j} style={{
                   width: 7, height: 7, borderRadius: "50%", background: t.textMut,
                   animation: `dotPulse 1.4s ${j * 0.2}s infinite ease-in-out`,
@@ -230,17 +448,65 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
           </div>
         )}
 
-        {msgs.length >= 2 && msgs[msgs.length - 1].role === "bot" && bookingUrl && (
-          <div style={{ animation: "chatIn 0.4s ease-out", marginTop: 4 }}>
-            <a href={bookingUrl} target="_blank" rel="noopener noreferrer" style={{
-              width: "100%", padding: "14px", borderRadius: 14, border: "none", cursor: "pointer",
-              background: t.gradient, color: "#fff", fontSize: 14, fontWeight: 700,
-              fontFamily: "'Outfit', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-              boxShadow: isDark ? `0 0 20px ${t.accent}30` : `0 4px 16px ${t.accent}20`,
-              textDecoration: "none", boxSizing: "border-box",
+        {/* Post-triage CTA — three flavors based on identity tier:
+              • Anonymous → "Save your session" upgrade prompt (booking gated)
+              • Patient with provider & bookingUrl → external booking link
+              • Patient without bookingUrl → in-app Book Appointment screen
+            All three only render after the Triage Agent has finished. */}
+        {triageDone && isAnonymous && (
+          <div style={{ animation: "chatIn 0.4s ease-out", marginTop: 12 }}>
+            <button
+              type="button"
+              onClick={() => { window.location.href = "/signup"; }}
+              style={{
+                width: "100%", padding: "14px", borderRadius: 14, border: "none", cursor: "pointer",
+                background: t.gradient, color: "#fff", fontSize: 14, fontWeight: 700,
+                fontFamily: "'Outfit', sans-serif",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                boxShadow: isDark ? `0 0 20px ${t.accent}30` : `0 4px 16px ${t.accent}20`,
+                boxSizing: "border-box",
+              }}
+            >
+              SAVE SESSION TO BOOK APPOINTMENT {Icons.arrowRight("#fff", 16)}
+            </button>
+            <div style={{
+              fontSize: 11.5, color: t.textMut, marginTop: 8, textAlign: "center",
+              fontFamily: "'Outfit', sans-serif",
             }}>
+              Your assessment will carry over to your account.
+            </div>
+          </div>
+        )}
+
+        {triageDone && !isAnonymous && bookingUrl && (
+          <div style={{ animation: "chatIn 0.4s ease-out", marginTop: 12 }}>
+            <a
+              href={bookingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                width: "100%", padding: "14px", borderRadius: 14, border: "none", cursor: "pointer",
+                background: t.gradient, color: "#fff", fontSize: 14, fontWeight: 700,
+                fontFamily: "'Outfit', sans-serif",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                boxShadow: isDark ? `0 0 20px ${t.accent}30` : `0 4px 16px ${t.accent}20`,
+                textDecoration: "none", boxSizing: "border-box",
+              }}
+            >
               BOOK APPOINTMENT {Icons.arrowRight("#fff", 16)}
             </a>
+          </div>
+        )}
+
+        {triageDone && !isAnonymous && !bookingUrl && (
+          <div style={{
+            animation: "chatIn 0.4s ease-out", marginTop: 12,
+            padding: "12px 14px", borderRadius: 12, background: t.bgCard,
+            border: `1px solid ${t.border}`,
+            fontSize: 12.5, color: t.textSec, textAlign: "center",
+            fontFamily: "'Outfit', sans-serif",
+          }}>
+            Your provider hasn't enabled online booking yet. Contact them through Messages.
           </div>
         )}
       </div>
@@ -250,23 +516,30 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
         <div style={{
           display: "flex", alignItems: "center", gap: 8, padding: "8px 12px",
           borderRadius: 12, background: t.bgInput, border: `1px solid ${t.border}`,
+          opacity: triageDone ? 0.5 : 1,
         }}>
           <input
-            placeholder="Type your symptoms..."
+            placeholder={triageDone ? "Assessment complete" : "Type your symptoms..."}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
+            disabled={triageDone}
             style={{
               flex: 1, border: "none", background: "transparent", outline: "none",
               fontSize: 14, color: t.text, fontFamily: "'Outfit', sans-serif",
             }}
           />
-          <button onClick={() => handleSend()} disabled={!input.trim() || typing} style={{
-            width: 34, height: 34, borderRadius: 10, border: "none", cursor: "pointer",
-            background: input.trim() ? t.gradient : t.textMut,
-            opacity: input.trim() ? 1 : 0.5,
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
+          <button
+            onClick={() => handleSend()}
+            disabled={!input.trim() || typing || triageDone}
+            style={{
+              width: 34, height: 34, borderRadius: 10, border: "none",
+              cursor: input.trim() && !triageDone ? "pointer" : "default",
+              background: input.trim() && !triageDone ? t.gradient : t.textMut,
+              opacity: input.trim() && !triageDone ? 1 : 0.5,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+          >
             {Icons.send("#fff", 14)}
           </button>
         </div>
