@@ -5,10 +5,28 @@ verify_jwt = true
 import_map = "./functions/create-user/deno.json"
 entrypoint = "./functions/create-user/index.ts"
 
+# Legacy single-agent chat function. Retained for backward compatibility
+# while clients migrate to the two-agent intake/triage flow.
 [functions.aichat]
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/aichat/index.ts"
+
+# Intake Agent — conversational symptom gathering. The Intake Agent has a
+# multi-turn conversation with the patient and signals readiness via a
+# "<complete/>" marker when it has enough information.
+[functions.intake]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/intake/index.ts"
+
+# Triage Agent — clinical assessment from the full intake transcript.
+# Single-shot: receives the conversation history and produces a structured
+# assessment with severity, urgency, and recommended next steps.
+[functions.triage]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/triage/index.ts"
 
 [functions.log-audit]
 enabled = true
