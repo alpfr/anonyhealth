@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { supabase } from "../supabaseClient";
 import { logAuditEvent } from "../utils/audit";
 import { isValidEmail, isStrongPassword } from "../utils/validation";
+import { extractInviteToken, goToInvite } from "../utils/inviteToken";
 import { Icons } from "../constants/theme";
 
 /**
@@ -51,6 +52,11 @@ export const AuthGate = ({
   const [info, setInfo] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [bootstrapping, setBootstrapping] = useState(false);
+
+  // Patient signups happen via invite link, not direct signup. When a
+  // fresh visitor (not anonymous) chooses the patient role on /signup, we
+  // show this input instead of email/password.
+  const [inviteInput, setInviteInput] = useState("");
 
   const updateRole = (next) => {
     setRole(next);
@@ -165,6 +171,20 @@ export const AuthGate = ({
       }
     }
   }, [email, password, upgradeAnonymousToAccount]);
+
+  /**
+   * Parse a pasted invite URL or token, then navigate to /invite/<token>
+   * where AcceptInviteMobile takes over with the normal flow.
+   */
+  const handleUseInvite = useCallback(() => {
+    resetMessages();
+    const token = extractInviteToken(inviteInput);
+    if (!token) {
+      setError("That doesn't look like a valid invite link. It should look like /invite/<token> or be a token you received.");
+      return;
+    }
+    goToInvite(token);
+  }, [inviteInput]);
 
   const handleVerifyOtp = useCallback(async () => {
     resetMessages();
@@ -649,146 +669,262 @@ export const AuthGate = ({
           </>
         ) : (
           <>
-            <input
-              type="email"
-              inputMode="email"
-              autoComplete="email"
-              className="auth-input"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) =>
-                e.key === "Enter" &&
-                (mode === "signin" ? handleSignIn() : handleSignUp())
-              }
-              style={inputStyle}
-            />
-            <input
-              type="password"
-              autoComplete={
-                mode === "signin" ? "current-password" : "new-password"
-              }
-              className="auth-input"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) =>
-                e.key === "Enter" &&
-                (mode === "signin" ? handleSignIn() : handleSignUp())
-              }
-              style={{
-                ...inputStyle,
-                border: `1px solid ${error ? "#ef4444" : "#e2e8f0"}`,
-              }}
-            />
+            {/* Patient signups happen via invite link, not direct form.
+                Fresh visitors (not anonymous) on /signup with patient role
+                see invite-link UI instead of email/password.
+                Anonymous users upgrading: existing email/password works as before. */}
+            {mode === "signup" && !upgrading && !isProviderRole ? (
+              <>
+                <div
+                  style={{
+                    padding: 14,
+                    borderRadius: 12,
+                    background: "#f1f5f9",
+                    border: "1px solid #e2e8f0",
+                    marginBottom: 16,
+                    textAlign: "left",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: "#0f172a",
+                      marginBottom: 4,
+                    }}
+                  >
+                    Patients join through an invite link
+                  </div>
+                  <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
+                    Your provider sends you a link that connects your account to their practice. If you have one, paste it below.
+                  </div>
+                </div>
 
-            {mode === "signup" && (
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "#64748b",
-                  marginBottom: 12,
-                  textAlign: "left",
-                }}
-              >
-                Min 8 characters, with uppercase, lowercase, and a digit.
-              </div>
-            )}
+                <input
+                  type="text"
+                  className="auth-input"
+                  placeholder="Paste invite link or token"
+                  value={inviteInput}
+                  onChange={(e) => setInviteInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleUseInvite()}
+                  style={inputStyle}
+                />
 
-            {error && (
-              <div
-                role="alert"
-                style={{ fontSize: 13, color: "#ef4444", marginBottom: 12 }}
-              >
-                {error}
-              </div>
-            )}
-            {info && (
-              <div style={{ fontSize: 13, color: "#16a34a", marginBottom: 12 }}>
-                {info}
-              </div>
-            )}
+                {error && (
+                  <div
+                    role="alert"
+                    style={{ fontSize: 13, color: "#ef4444", marginBottom: 12 }}
+                  >
+                    {error}
+                  </div>
+                )}
 
-            <button
-              onClick={mode === "signin" ? handleSignIn : handleSignUp}
-              disabled={submitting}
-              style={primaryBtn(submitting)}
-            >
-              {submitting
-                ? mode === "signin"
-                  ? "Signing in..."
-                  : "Creating account..."
-                : mode === "signin"
-                  ? "Sign In"
-                  : signUpHeading}
-            </button>
+                <button
+                  onClick={handleUseInvite}
+                  disabled={!inviteInput.trim() || submitting}
+                  style={{
+                    ...primaryBtn(submitting),
+                    opacity: inviteInput.trim() ? 1 : 0.5,
+                    cursor: inviteInput.trim() ? "pointer" : "default",
+                  }}
+                >
+                  Use invite
+                </button>
 
-            {mode === "signin" && (
-              <button
-                type="button"
-                onClick={() => {
-                  setMode("forgot");
-                  resetMessages();
-                }}
-                style={{
-                  marginTop: 12,
-                  background: "none",
-                  border: "none",
-                  color: "#38bdf8",
-                  cursor: "pointer",
-                  fontSize: 13,
-                  padding: 0,
-                }}
-              >
-                Forgot your password?
-              </button>
-            )}
+                {/* Two alternative paths for visitors without an invite */}
+                <div
+                  style={{
+                    marginTop: 18,
+                    paddingTop: 16,
+                    borderTop: "1px solid #e2e8f0",
+                    fontSize: 12,
+                    color: "#64748b",
+                    textAlign: "center",
+                    lineHeight: 1.6,
+                  }}
+                >
+                  Already have an account?{" "}
+                  <button
+                    type="button"
+                    onClick={() => { setMode("signin"); resetMessages(); }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#38bdf8",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      padding: 0,
+                      fontWeight: 600,
+                    }}
+                  >
+                    Sign in
+                  </button>
+                  <br />
+                  Just want to try AI triage?{" "}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await signInAnonymously();
+                      window.location.href = "/";
+                    }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#38bdf8",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      padding: 0,
+                      fontWeight: 600,
+                    }}
+                  >
+                    Continue anonymously
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <input
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  className="auth-input"
+                  placeholder="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onKeyDown={(e) =>
+                    e.key === "Enter" &&
+                    (mode === "signin" ? handleSignIn() : handleSignUp())
+                  }
+                  style={inputStyle}
+                />
+                <input
+                  type="password"
+                  autoComplete={
+                    mode === "signin" ? "current-password" : "new-password"
+                  }
+                  className="auth-input"
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onKeyDown={(e) =>
+                    e.key === "Enter" &&
+                    (mode === "signin" ? handleSignIn() : handleSignUp())
+                  }
+                  style={{
+                    ...inputStyle,
+                    border: `1px solid ${error ? "#ef4444" : "#e2e8f0"}`,
+                  }}
+                />
 
-            {/* Anonymous escape hatch — let patient visitors browse without
-                an account. Hidden for providers (they have no use case for
-                anonymous mode). */}
-            {tier === "anonymous_ok" && !session && !isProviderRole && (
-              <button
-                type="button"
-                onClick={async () => {
-                  await signInAnonymously();
-                  window.location.href = "/";
-                }}
-                style={{
-                  marginTop: 16,
-                  paddingTop: 16,
-                  borderTop: "1px solid #e2e8f0",
-                  background: "none",
-                  border: "none",
-                  borderTopColor: "#e2e8f0",
-                  color: "#0f172a",
-                  cursor: "pointer",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  width: "100%",
-                }}
-              >
-                Continue anonymously →
-              </button>
-            )}
+                {mode === "signup" && (
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "#64748b",
+                      marginBottom: 12,
+                      textAlign: "left",
+                    }}
+                  >
+                    Min 8 characters, with uppercase, lowercase, and a digit.
+                  </div>
+                )}
 
-            {/* Provider-specific helper link. */}
-            {isProviderRole && mode === "signin" && (
-              <a
-                href="/for-providers"
-                style={{
-                  display: "block",
-                  marginTop: 16,
-                  paddingTop: 16,
-                  borderTop: "1px solid #e2e8f0",
-                  color: "#64748b",
-                  fontSize: 12,
-                  textDecoration: "none",
-                  textAlign: "center",
-                }}
-              >
-                What is AnonyHealth for providers? →
-              </a>
+                {error && (
+                  <div
+                    role="alert"
+                    style={{ fontSize: 13, color: "#ef4444", marginBottom: 12 }}
+                  >
+                    {error}
+                  </div>
+                )}
+                {info && (
+                  <div style={{ fontSize: 13, color: "#16a34a", marginBottom: 12 }}>
+                    {info}
+                  </div>
+                )}
+
+                <button
+                  onClick={mode === "signin" ? handleSignIn : handleSignUp}
+                  disabled={submitting}
+                  style={primaryBtn(submitting)}
+                >
+                  {submitting
+                    ? mode === "signin"
+                      ? "Signing in..."
+                      : "Creating account..."
+                    : mode === "signin"
+                      ? "Sign In"
+                      : signUpHeading}
+                </button>
+
+                {mode === "signin" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("forgot");
+                      resetMessages();
+                    }}
+                    style={{
+                      marginTop: 12,
+                      background: "none",
+                      border: "none",
+                      color: "#38bdf8",
+                      cursor: "pointer",
+                      fontSize: 13,
+                      padding: 0,
+                    }}
+                  >
+                    Forgot your password?
+                  </button>
+                )}
+
+                {/* Anonymous escape hatch — let patient visitors browse without
+                    an account. Hidden for providers (they have no use case for
+                    anonymous mode). */}
+                {tier === "anonymous_ok" && !session && !isProviderRole && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await signInAnonymously();
+                      window.location.href = "/";
+                    }}
+                    style={{
+                      marginTop: 16,
+                      paddingTop: 16,
+                      borderTop: "1px solid #e2e8f0",
+                      background: "none",
+                      border: "none",
+                      borderTopColor: "#e2e8f0",
+                      color: "#0f172a",
+                      cursor: "pointer",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      width: "100%",
+                    }}
+                  >
+                    Continue anonymously →
+                  </button>
+                )}
+
+                {/* Provider-specific helper link. */}
+                {isProviderRole && mode === "signin" && (
+                  <a
+                    href="/for-providers"
+                    style={{
+                      display: "block",
+                      marginTop: 16,
+                      paddingTop: 16,
+                      borderTop: "1px solid #e2e8f0",
+                      color: "#64748b",
+                      fontSize: 12,
+                      textDecoration: "none",
+                      textAlign: "center",
+                    }}
+                  >
+                    What is AnonyHealth for providers? →
+                  </a>
+                )}
+              </>
             )}
           </>
         )}
