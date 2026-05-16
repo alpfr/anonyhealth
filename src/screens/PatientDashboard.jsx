@@ -5,17 +5,22 @@ import { useTenant } from "../context/TenantContext";
 import { fetchHealthLogs } from "../services/healthLogs";
 import { getProviderProfile } from "../services/providerProfile";
 import { useAuth } from "../context/AuthContext";
+import { extractInviteToken, goToInvite } from "../utils/inviteToken";
 
 // ═══════════════════════════════════════════════════════════
 // SCREEN: PATIENT DASHBOARD (MOBILE)
-// Shows the patient's provider, an AI Chat entry point, and the most
-// recent triage entries. Patients in this multi-tenant model only
-// interact with the one provider whose invite they accepted.
+// Shows the patient's provider (or anonymous welcome card), an AI Chat
+// entry point, and recent triage entries.
+//
+// Three identity tiers render different top cards:
+//   • Anonymous    → Privacy-first welcome card
+//   • Patient w/ provider → Provider banner (existing behavior)
+//   • Patient w/o provider → Awaiting-provider state
 // ═══════════════════════════════════════════════════════════
 export const PatientDashboard = ({ theme, onNavigate }) => {
   const t = T[theme];
   const { tenant } = useTenant();
-  const { session } = useAuth();
+  const { session, isAnonymous } = useAuth();
   const [activityInput, setActivityInput] = useState("");
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,12 +41,14 @@ export const PatientDashboard = ({ theme, onNavigate }) => {
 
   useEffect(() => {
     let cancelled = false;
-    if (!tenant?.id) return;
+    // Anonymous users have no tenant — skip the provider lookup entirely.
+    // Without this, the "Loading..." state would never resolve.
+    if (isAnonymous || !tenant?.id) return;
     getProviderProfile(tenant.id)
       .then((row) => { if (!cancelled) setProviderProfile(row); })
       .catch(() => { /* non-fatal — banner falls back to tenant.name */ });
     return () => { cancelled = true; };
-  }, [tenant?.id]);
+  }, [tenant?.id, isAnonymous]);
 
   const handleActivitySubmit = (e) => {
     if (e.key === "Enter" && activityInput.trim()) {
@@ -61,75 +68,122 @@ export const PatientDashboard = ({ theme, onNavigate }) => {
     <>
       <MobileNav theme={theme} />
       <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
-        {/* Provider banner */}
-        <div style={{
-          padding: 16, borderRadius: 14, background: t.bgCard,
-          border: `1px solid ${t.border}`, boxShadow: t.shadow, marginBottom: 24,
-          display: "flex", gap: 14, alignItems: "flex-start",
-        }}>
-          {providerProfile?.avatar_url ? (
-            <img src={providerProfile.avatar_url} alt=""
-              style={{ width: 48, height: 48, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />
-          ) : (
+
+        {/* ─── Top card ─── tier-aware */}
+        {isAnonymous ? (
+          // Anonymous user: privacy-first welcome with subtle upgrade nudge.
+          // No "Your provider / Loading..." card, no Book Appointment button
+          // (booking requires a real account with a tenant).
+          <div style={{
+            padding: 18, borderRadius: 14, background: t.bgCard,
+            border: `1px solid ${t.border}`, boxShadow: t.shadow, marginBottom: 24,
+            display: "flex", gap: 14, alignItems: "flex-start",
+          }}>
             <div style={{
               width: 48, height: 48, borderRadius: 12, background: t.gradient,
               display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-              color: "#fff", fontWeight: 700, fontSize: 18,
             }}>
-              {(providerProfile?.display_name || tenant?.name || "?").charAt(0).toUpperCase()}
+              {Icons.shield("#fff", 20)}
             </div>
-          )}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11, color: t.textMut, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>
-              Your provider
-            </div>
-            <div style={{ fontSize: 17, fontWeight: 700, color: t.text, fontFamily: "'Outfit', sans-serif", marginTop: 2 }}>
-              {providerProfile?.display_name || tenant?.name || "Loading..."}
-              {providerProfile?.credentials && (
-                <span style={{ fontSize: 13, fontWeight: 500, color: t.textSec, marginLeft: 6 }}>
-                  {providerProfile.credentials}
-                </span>
-              )}
-            </div>
-            {providerProfile?.specialty && (
-              <div style={{ fontSize: 12, color: t.accent, fontFamily: "'Outfit', sans-serif", marginTop: 2, fontWeight: 600 }}>
-                {providerProfile.specialty}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, color: t.accent, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>
+                Anonymous session
               </div>
-            )}
-            {providerProfile?.bio && (
-              <div style={{ fontSize: 12, color: t.textSec, fontFamily: "'Outfit', sans-serif", marginTop: 6, lineHeight: 1.5 }}>
-                {providerProfile.bio}
+              <div style={{ fontSize: 16, fontWeight: 700, color: t.text, fontFamily: "'Instrument Serif', Georgia, serif", marginTop: 2, letterSpacing: "-0.01em" }}>
+                Talk to AI triage, privately.
               </div>
-            )}
-            {providerProfile?.scheduling_url ? (
-              <a
-                href={/^https?:\/\//i.test(providerProfile.scheduling_url)
-                  ? providerProfile.scheduling_url
-                  : `https://${providerProfile.scheduling_url}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: "inline-block", marginTop: 10, padding: "8px 14px",
-                  borderRadius: 10, background: t.accent, color: "#fff",
-                  fontSize: 13, fontWeight: 600, textDecoration: "none",
-                }}
-              >
-                Book appointment →
-              </a>
-            ) : (
+              <div style={{ fontSize: 13, color: t.textSec, fontFamily: "'Outfit', sans-serif", marginTop: 6, lineHeight: 1.5 }}>
+                No account needed to start. Save your session when you're ready to book an appointment or message a provider.
+              </div>
               <button
-                onClick={() => onNavigate("book")}
+                onClick={() => { window.location.href = "/signup"; }}
                 style={{
                   marginTop: 10, padding: "8px 14px", borderRadius: 10,
                   border: "none", background: t.accent, color: "#fff",
                   fontSize: 13, fontWeight: 600, cursor: "pointer",
+                  fontFamily: "'Outfit', sans-serif",
                 }}
               >
-                Book appointment →
+                Save my session →
               </button>
-            )}
+            </div>
           </div>
-        </div>
+        ) : tenant?.id ? (
+          // Patient with provider tenant: existing provider banner.
+          <div style={{
+            padding: 16, borderRadius: 14, background: t.bgCard,
+            border: `1px solid ${t.border}`, boxShadow: t.shadow, marginBottom: 24,
+            display: "flex", gap: 14, alignItems: "flex-start",
+          }}>
+            {providerProfile?.avatar_url ? (
+              <img src={providerProfile.avatar_url} alt=""
+                style={{ width: 48, height: 48, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />
+            ) : (
+              <div style={{
+                width: 48, height: 48, borderRadius: 12, background: t.gradient,
+                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                color: "#fff", fontWeight: 700, fontSize: 18,
+              }}>
+                {(providerProfile?.display_name || tenant?.name || "?").charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, color: t.textMut, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>
+                Your provider
+              </div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: t.text, fontFamily: "'Outfit', sans-serif", marginTop: 2 }}>
+                {providerProfile?.display_name || tenant?.name || "Loading..."}
+                {providerProfile?.credentials && (
+                  <span style={{ fontSize: 13, fontWeight: 500, color: t.textSec, marginLeft: 6 }}>
+                    {providerProfile.credentials}
+                  </span>
+                )}
+              </div>
+              {providerProfile?.specialty && (
+                <div style={{ fontSize: 12, color: t.accent, fontFamily: "'Outfit', sans-serif", marginTop: 2, fontWeight: 600 }}>
+                  {providerProfile.specialty}
+                </div>
+              )}
+              {providerProfile?.bio && (
+                <div style={{ fontSize: 12, color: t.textSec, fontFamily: "'Outfit', sans-serif", marginTop: 6, lineHeight: 1.5 }}>
+                  {providerProfile.bio}
+                </div>
+              )}
+              {providerProfile?.scheduling_url ? (
+                <a
+                  href={/^https?:\/\//i.test(providerProfile.scheduling_url)
+                    ? providerProfile.scheduling_url
+                    : `https://${providerProfile.scheduling_url}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: "inline-block", marginTop: 10, padding: "8px 14px", borderRadius: 10,
+                    background: t.accent, color: "#fff",
+                    fontSize: 13, fontWeight: 600, textDecoration: "none",
+                  }}
+                >
+                  Book appointment →
+                </a>
+              ) : (
+                <button
+                  onClick={() => onNavigate("book")}
+                  style={{
+                    marginTop: 10, padding: "8px 14px", borderRadius: 10,
+                    border: "none", background: t.accent, color: "#fff",
+                    fontSize: 13, fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  Book appointment →
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          // Patient signed in but no tenant yet — likely upgraded from
+          // anonymous without an invite. Offer a way to redeem an invite
+          // right here so they can complete onboarding.
+          <OrphanPatientCard theme={theme} />
+        )}
 
         {/* AI Triage entry */}
         <div style={{ marginBottom: 24 }}>
@@ -221,5 +275,87 @@ export const PatientDashboard = ({ theme, onNavigate }) => {
         </div>
       </div>
     </>
+  );
+};
+
+// ─────────────────────────────────────────────────────────
+// OrphanPatientCard — shown when a patient is signed in but has no tenant
+// connection. Lets them redeem an invite link without leaving the dashboard.
+// ─────────────────────────────────────────────────────────
+const OrphanPatientCard = ({ theme }) => {
+  const t = T[theme];
+  const [input, setInput] = useState("");
+  const [error, setError] = useState("");
+
+  const handleUseInvite = () => {
+    setError("");
+    const token = extractInviteToken(input);
+    if (!token) {
+      setError("That doesn't look like a valid invite link.");
+      return;
+    }
+    goToInvite(token);
+  };
+
+  return (
+    <div style={{
+      padding: 18, borderRadius: 14, background: t.bgCard,
+      border: `1px solid ${t.border}`, boxShadow: t.shadow, marginBottom: 24,
+    }}>
+      <div style={{
+        fontSize: 11, color: t.accent, textTransform: "uppercase",
+        letterSpacing: "0.06em", fontWeight: 700, marginBottom: 6,
+      }}>
+        Connect with a provider
+      </div>
+      <div style={{
+        fontSize: 14, fontWeight: 600, color: t.text,
+        fontFamily: "'Outfit', sans-serif", marginBottom: 6,
+      }}>
+        You're signed in, but not yet connected to a provider
+      </div>
+      <div style={{
+        fontSize: 12.5, color: t.textSec, fontFamily: "'Outfit', sans-serif",
+        marginBottom: 12, lineHeight: 1.5,
+      }}>
+        Patients connect through an invite link from their provider. If you have one, paste it below to finish setup.
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleUseInvite()}
+          placeholder="Paste invite link"
+          style={{
+            flex: 1, padding: "10px 12px", borderRadius: 10,
+            border: `1px solid ${t.border}`, background: t.bgInput, color: t.text,
+            outline: "none", fontSize: 13, fontFamily: "'Outfit', sans-serif",
+          }}
+        />
+        <button
+          onClick={handleUseInvite}
+          disabled={!input.trim()}
+          style={{
+            padding: "10px 16px", borderRadius: 10, border: "none",
+            background: input.trim() ? t.accent : t.textMut,
+            color: "#fff", fontSize: 13, fontWeight: 600,
+            cursor: input.trim() ? "pointer" : "default",
+            fontFamily: "'Outfit', sans-serif",
+            opacity: input.trim() ? 1 : 0.5,
+          }}
+        >
+          Use
+        </button>
+      </div>
+      {error && (
+        <div role="alert" style={{
+          fontSize: 12, color: "#ef4444", marginTop: 8,
+          fontFamily: "'Outfit', sans-serif",
+        }}>
+          {error}
+        </div>
+      )}
+    </div>
   );
 };
