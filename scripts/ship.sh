@@ -191,10 +191,31 @@ section "Tests"
 if [[ "$DRY_RUN" == true ]]; then
     info "[dry-run] Would watch PR test workflow."
 else
-    info "Waiting for the Test workflow to start (this can take ~20s)..."
+    info "Waiting for the Test workflow to start..."
 
-    # gh pr checks waits for all checks to complete and exits non-zero if any fail.
-    # We pipe through a friendly progress indicator.
+    # GitHub takes 20-60s to register a workflow run after push. Poll until
+    # at least one check appears, with a generous timeout. Without this,
+    # `gh pr checks --watch` returns immediately with "no checks reported"
+    # which the script misreads as failure.
+    WAIT_DEADLINE=$((SECONDS + 120))
+    while [[ $SECONDS -lt $WAIT_DEADLINE ]]; do
+        # `gh pr checks` returns a non-zero exit code for "no checks reported"
+        # and for "checks failing", so we can't rely on exit code alone.
+        # Instead, count rollup entries in the JSON output.
+        CHECK_COUNT=$(gh pr view "$PR_NUMBER" --json statusCheckRollup --jq '.statusCheckRollup | length' 2>/dev/null || echo 0)
+        if [[ "$CHECK_COUNT" -gt 0 ]]; then
+            break
+        fi
+        sleep 6
+    done
+
+    if [[ "${CHECK_COUNT:-0}" -eq 0 ]]; then
+        warn "No checks appeared within 2 minutes. Workflow may not be configured."
+        info "Open the PR to investigate: $PR_URL"
+        exit 1
+    fi
+
+    info "Checks registered. Watching for results..."
     if gh pr checks "$PR_NUMBER" --watch --interval 10; then
         ok "All checks passed"
     else
