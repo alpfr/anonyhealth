@@ -31,6 +31,12 @@ AnonyHealth connects patients with healthcare providers while maintaining strict
   <img src="docs/images/anonyhealth_patient_doctor_workflow.jpg" alt="AnonyHealth Patient & Doctor Clinical Journey Architecture" width="100%" />
 </p>
 
+### 3. Application Presentation & End-to-End User Journey Flow
+<p align="center">
+  <img src="docs/images/anonyhealth_presentation_flow.jpg" alt="How AnonyHealth Works: End-to-End User Journey & Presentation Guide" width="100%" />
+</p>
+<p align="center"><i>See <a href="docs/PRESENTATION_GUIDE.md">docs/PRESENTATION_GUIDE.md</a> for the full slide-by-slide pitch and live demonstration script.</i></p>
+
 ## Tech Stack
 
 - **Frontend**: React 19, Vite 7, JavaScript (JSX)
