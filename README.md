@@ -12,6 +12,7 @@ AnonyHealth connects patients with healthcare providers while maintaining strict
 - **Confidential Registration** — Identity verification fields (name, DOB, address) for Maryland telehealth compliance. PII stored in Supabase auth metadata with consent timestamp.
 - **Secure Authentication** — Supabase Auth with email/password sign up and sign in. Prototype access gated by password.
 - **Responsive UI** — Split view (desktop + mobile phone frame), desktop-only, and mobile-only modes. Dark/light theme toggle.
+- **Jev System 1 Clinical Safety Engine** — Deterministic edge reflex engine (<1ms, $0.00 token cost) intercepting emergency red flags (STEMI, stroke, anaphylaxis, crisis), dual-vault zero-knowledge PII/clinical data separation, and post-triage safety arbiter. See [docs/JEV_HEALTHCARE_ARCHITECTURE.md](docs/JEV_HEALTHCARE_ARCHITECTURE.md).
 - **Privacy Controls** — Settings for anonymizing patient activity, notification preferences, and data management.
 
 ## Tech Stack
