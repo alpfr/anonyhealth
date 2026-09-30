@@ -81,14 +81,20 @@ create policy "Users can view own profile" on patient_profiles for select using 
 create policy "Users can insert own profile" on patient_profiles for insert with check (auth.uid() = id);
 create policy "Users can update own profile" on patient_profiles for update using (auth.uid() = id);
 
--- 3. Health Logs (History)
+-- 3. Health Logs (History & Jev Clinical Triage)
 create table health_logs (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references auth.users not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   symptom text,
   severity int, -- 1-10
-  ai_advice text
+  ai_advice text,
+  -- Jev System 1 Clinical Governance & Audit Provenance:
+  urgency text default 'routine' check (urgency in ('routine', 'urgent', 'emergency')),
+  decision_class text default 'AUTONOMOUS_HOME_CARE',
+  risk_band text default 'LOW' check (risk_band in ('LOW', 'MODERATE', 'HIGH', 'CRITICAL')),
+  red_flags text[] default '{}',
+  arbiter_hash text
 );
 
 -- Enable RLS
@@ -161,6 +167,10 @@ create index idx_health_logs_user_created on health_logs (user_id, created_at de
 -- health_logs: severity filtering for analytics
 create index idx_health_logs_severity on health_logs (severity);
 
+-- health_logs: Jev risk_band & decision_class filtering for clinical triage
+create index idx_health_logs_risk_band on health_logs (risk_band);
+create index idx_health_logs_decision_class on health_logs (decision_class);
+
 -- audit_logs: queried by user_id + created_at for compliance review
 create index idx_audit_logs_user_created on audit_logs (user_id, created_at desc);
 
@@ -171,3 +181,15 @@ create index idx_audit_logs_event_type on audit_logs (event_type);
 create index idx_providers_specialty on providers (specialty);
 
 -- patient_profiles: no additional index needed (PK lookup only)
+
+-- ═══════════════════════════════════════════════════════════
+-- JEV CLINICAL GOVERNANCE MIGRATION (Idempotent for existing DBs)
+-- ═══════════════════════════════════════════════════════════
+-- alter table health_logs add column if not exists urgency text default 'routine' check (urgency in ('routine', 'urgent', 'emergency'));
+-- alter table health_logs add column if not exists decision_class text default 'AUTONOMOUS_HOME_CARE';
+-- alter table health_logs add column if not exists risk_band text default 'LOW' check (risk_band in ('LOW', 'MODERATE', 'HIGH', 'CRITICAL'));
+-- alter table health_logs add column if not exists red_flags text[] default '{}';
+-- alter table health_logs add column if not exists arbiter_hash text;
+-- create index if not exists idx_health_logs_risk_band on health_logs (risk_band);
+-- create index if not exists idx_health_logs_decision_class on health_logs (decision_class);
+

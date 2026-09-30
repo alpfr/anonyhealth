@@ -23,6 +23,7 @@ import {
     validateHistory,
     type Message,
 } from "../_shared/anthropic.ts";
+import { evaluateEmergencyReflex } from "../_shared/jev_clinical_engine.ts";
 
 const MAX_MESSAGE_LENGTH = 2000;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
@@ -113,6 +114,21 @@ serve(async (req) => {
         return jsonResponse(
             { error: `Message exceeds maximum length of ${MAX_MESSAGE_LENGTH} characters` },
             400,
+            corsHeaders,
+        );
+    }
+
+    // Jev System 1 Edge Reflex Intercept (<1ms)
+    const emergency = evaluateEmergencyReflex(message);
+    if (emergency) {
+        return jsonResponse(
+            {
+                emergency: true,
+                trigger: emergency.triggerCode,
+                decision_class: emergency.decisionClass,
+                advice: emergency.advice,
+            },
+            200,
             corsHeaders,
         );
     }

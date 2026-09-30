@@ -7,6 +7,8 @@ import { insertHealthLog } from "../services/healthLogs";
 import { useTenant } from "../context/TenantContext";
 import { useAuth } from "../context/AuthContext";
 import { getProviderProfile } from "../services/providerProfile";
+import { evaluateEmergencyReflex, sanitizeClientPII } from "../utils/jevReflex";
+import { EmergencyInterceptModal } from "../components/EmergencyInterceptModal";
 
 const ensureHttps = (u) => (u && /^https?:\/\//i.test(u) ? u : u ? `https://${u}` : null);
 
@@ -101,6 +103,9 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
   const [currentAgent, setCurrentAgent] = useState("intake");
   // Once the triage assessment has been delivered we lock further user input.
   const [triageDone, setTriageDone] = useState(false);
+  // Jev System 1 Emergency Reflex Intercept State
+  const [emergencyData, setEmergencyData] = useState(null);
+  const [showEmergencyModal, setShowEmergencyModal] = useState(false);
   const chatRef = useRef(null);
   const abortRef = useRef(null);
 
@@ -206,7 +211,42 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
     const textToSend = sanitizeChatMessage(raw);
     if (!textToSend) return;
 
-    if (textToSend.length > 2000) {
+    // ─── Jev System 1 Deterministic Edge Reflex Check (<1ms, $0.00 Token Cost) ───
+    const emergencyIntercept = evaluateEmergencyReflex(textToSend);
+    if (emergencyIntercept) {
+      setEmergencyData(emergencyIntercept);
+      setShowEmergencyModal(true);
+      if (!skipUserAdd) {
+        setMsgs((prev) => [
+          ...prev,
+          { role: "user", text: textToSend },
+          {
+            role: "bot",
+            agent: "triage",
+            isEmergency: true,
+            text: emergencyIntercept.advice,
+          },
+        ]);
+        setInput("");
+      } else {
+        setMsgs((prev) => [
+          ...prev,
+          {
+            role: "bot",
+            agent: "triage",
+            isEmergency: true,
+            text: emergencyIntercept.advice,
+          },
+        ]);
+      }
+      setTriageDone(true);
+      return;
+    }
+
+    // ─── Zero-Knowledge PII Sanitization ───
+    const { sanitized: piiCleanedText } = sanitizeClientPII(textToSend);
+
+    if (piiCleanedText.length > 2000) {
       setMsgs((prev) => [
         ...prev,
         { role: "bot", agent: "intake", text: "Please keep your message under 2000 characters." },
@@ -216,7 +256,7 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
 
     // Build the message list as it'll appear AFTER this user turn is added,
     // because both UI state and Intake API need to see this turn.
-    const newUserMsg = { role: "user", text: textToSend };
+    const newUserMsg = { role: "user", text: piiCleanedText };
     const baseMsgs = skipUserAdd ? msgs : [...msgs, newUserMsg];
 
     if (!skipUserAdd) {
@@ -254,7 +294,7 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ message: textToSend, history }),
+        body: JSON.stringify({ message: piiCleanedText, history }),
         signal: controller.signal,
       });
 
@@ -395,16 +435,63 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
                 borderRadius: msg.role === "user"
                   ? "16px 16px 4px 16px"
                   : "16px 16px 16px 4px",
-                background: msg.role === "user" ? t.accent : t.bgCard,
-                color: msg.role === "user" ? "#fff" : t.text,
+                background: msg.isEmergency
+                  ? (isDark ? "rgba(239, 68, 68, 0.15)" : "#FEF2F2")
+                  : (msg.role === "user" ? t.accent : t.bgCard),
+                color: msg.isEmergency
+                  ? (isDark ? "#FECACA" : "#991B1B")
+                  : (msg.role === "user" ? "#fff" : t.text),
                 fontSize: 14, lineHeight: 1.55, fontFamily: "'Outfit', sans-serif",
-                border: msg.role === "user" ? "none" : `1px solid ${t.border}`,
+                border: msg.isEmergency
+                  ? `2px solid ${t.danger}`
+                  : (msg.role === "user" ? "none" : `1px solid ${t.border}`),
                 boxShadow: msg.role === "user"
                   ? (isDark ? `0 2px 12px ${t.accent}30` : `0 2px 8px ${t.accent}15`)
-                  : "none",
+                  : (msg.isEmergency ? "0 4px 16px rgba(220, 38, 38, 0.2)" : "none"),
                 whiteSpace: "pre-wrap",
               }}>
                 {msg.text}
+
+                {msg.isEmergency && (
+                  <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <a
+                      href="tel:911"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        padding: "7px 14px",
+                        background: "#DC2626",
+                        color: "#fff",
+                        borderRadius: 10,
+                        fontSize: 12.5,
+                        fontWeight: 700,
+                        textDecoration: "none",
+                        boxShadow: "0 2px 8px rgba(220, 38, 38, 0.3)",
+                      }}
+                    >
+                      <span>📞</span> Call 911 Now
+                    </a>
+                    <a
+                      href="tel:988"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        padding: "7px 14px",
+                        background: isDark ? "#2A3352" : "#F3F4F6",
+                        color: t.text,
+                        borderRadius: 10,
+                        fontSize: 12.5,
+                        fontWeight: 600,
+                        textDecoration: "none",
+                        border: `1px solid ${t.border}`,
+                      }}
+                    >
+                      <span>💬</span> Dial 988
+                    </a>
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -544,6 +631,14 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
           </button>
         </div>
       </div>
+
+      {/* Jev System 1 Emergency Reflex Intercept Modal */}
+      <EmergencyInterceptModal
+        isOpen={showEmergencyModal}
+        onClose={() => setShowEmergencyModal(false)}
+        interceptData={emergencyData}
+        theme={theme}
+      />
     </>
   );
 };

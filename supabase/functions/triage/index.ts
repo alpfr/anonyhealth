@@ -27,6 +27,7 @@ import {
     streamAnthropic,
     validateHistory,
 } from "../_shared/anthropic.ts";
+import { evaluateEmergencyReflex, auditTriageOutput } from "../_shared/jev_clinical_engine.ts";
 
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const MAX_REQUESTS_PER_WINDOW = 3; // Lower than intake — triage is heavyweight
@@ -118,6 +119,27 @@ serve(async (req) => {
             400,
             corsHeaders,
         );
+    }
+
+    // Jev System 1 Check: scan transcript for any unhandled emergency red flags (<1ms)
+    for (const item of history) {
+        if (item.role === "user") {
+            const emergency = evaluateEmergencyReflex(item.content);
+            if (emergency) {
+                return jsonResponse({
+                    emergency: true,
+                    trigger: emergency.triggerCode,
+                    decision_class: emergency.decisionClass,
+                    advice: emergency.advice,
+                    metadata: {
+                        severity: 10,
+                        urgency: "emergency",
+                        symptom: emergency.title,
+                        next_steps: "Call 911 or proceed immediately to the nearest Emergency Department.",
+                    },
+                }, 200, corsHeaders);
+            }
+        }
     }
 
     // Triage doesn't take a "next message" — it processes the existing

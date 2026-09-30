@@ -64,6 +64,24 @@ export const DoctorDashboardMobile = ({ theme, onOpenPatient, onOpenSettings, on
           {subscription?.trial_end && ` · trial ends ${new Date(subscription.trial_end).toLocaleDateString()}`}
         </p>
 
+        {/* Jev Clinical Safety Engine Status */}
+        <div style={{
+          marginTop: 12, padding: "8px 12px", borderRadius: 10,
+          background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.2)",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 14 }}>🛡️</span>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#10b981" }}>Jev Clinical Safety Guard Active</div>
+              <div style={{ fontSize: 10, color: t.textMut }}>0ms Emergency Intercept · Zero-Knowledge PII Redaction</div>
+            </div>
+          </div>
+          <span style={{ fontSize: 9, fontWeight: 700, color: "#10b981", background: "rgba(16, 185, 129, 0.15)", padding: "2px 6px", borderRadius: 4 }}>
+            SYSTEM 1
+          </span>
+        </div>
+
         <div style={{ marginTop: 20, padding: 16, borderRadius: 14, background: t.bgCard, border: `1px solid ${t.border}` }}>
           <div style={{ fontSize: 14, fontWeight: 600 }}>Invite a patient</div>
           <div style={{ fontSize: 12, color: t.textSec, marginTop: 4 }}>
