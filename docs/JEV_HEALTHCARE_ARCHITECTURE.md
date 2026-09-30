@@ -106,6 +106,27 @@ flowchart TD
     UI -. "Authenticated Auth.uid()" .-> IdentityVault
 ```
 
+### 2.2 Patient & Doctor Clinical Journey & Application Architecture
+
+The interaction model cleanly decouples patient privacy preservation from clinician oversight, enabling anonymous patient triage while empowering healthcare providers with actionable clinical insights.
+
+![AnonyHealth Patient & Doctor Clinical Journey Architecture](images/anonyhealth_patient_doctor_workflow.jpg)
+
+* **Patient Experience (Left):**
+  - **Anonymous Mobile Web App:** Patients interact without mandatory account creation or invasive tracking.
+  - **Deterministic Emergency Guard:** In-app regex reflex engine (<1ms) diverts acute red flags directly to 911 / 988 Lifeline.
+  - **Zero-Knowledge PII Scrubber:** Strips identifying tokens before cloud dispatch.
+  - **Appointment Booking & Secure Messaging:** Connects with verified Maryland licensed providers.
+* **AnonyHealth Secure Core (Center):**
+  - **Dual-Vault Isolation:** Identity Vault stores encrypted patient demographics; Anonymized Clinical Vault stores pseudonymous health records.
+  - **Supabase PostgreSQL RLS:** Row-level security strictly segregates patient-doctor access privileges.
+  - **Jev Clinical Arbiter:** Algorithmic post-triage safety, drug validation, and SHA-256 audit logging.
+* **Doctor / Provider Experience (Right):**
+  - **Management Dashboard:** Practice overview and single-use patient invite token generator (7-day validity).
+  - **Patient Roster & Jev Risk HUD:** Real-time triage list stratified into `LOW`, `MODERATE`, `HIGH`, and `CRITICAL` risk bands.
+  - **1-Click Clinical SOAP Note Generator:** Synthesizes Maryland Telehealth Act HB 123-compliant notes exportable to hospital EHR systems (Epic, Cerner, AthenaHealth).
+  - **Appointment Approvals & Telehealth Visits:** Asynchronous confirmation and care coordination.
+
 ---
 
 ## 3. Cognitive Pipeline: System 1 vs. System 2

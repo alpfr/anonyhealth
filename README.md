@@ -19,6 +19,18 @@ AnonyHealth connects patients with healthcare providers while maintaining strict
 - **Jev System 1 Clinical Safety Engine** — Deterministic edge reflex engine (<1ms, $0.00 token cost) intercepting emergency red flags (STEMI, stroke, anaphylaxis, crisis), dual-vault zero-knowledge PII/clinical data separation, and post-triage safety arbiter. See [docs/JEV_HEALTHCARE_ARCHITECTURE.md](docs/JEV_HEALTHCARE_ARCHITECTURE.md).
 - **Privacy Controls** — Settings for anonymizing patient activity, notification preferences, and data management.
 
+## Architectural Designs
+
+### 1. Jev System 1 Clinical Cognitive Architecture
+<p align="center">
+  <img src="docs/images/anonyhealth_jev_architecture.jpg" alt="AnonyHealth Jev System 1 Clinical Cognitive Architecture" width="100%" />
+</p>
+
+### 2. Patient & Doctor Clinical Journey & Application Architecture
+<p align="center">
+  <img src="docs/images/anonyhealth_patient_doctor_workflow.jpg" alt="AnonyHealth Patient & Doctor Clinical Journey Architecture" width="100%" />
+</p>
+
 ## Tech Stack
 
 - **Frontend**: React 19, Vite 7, JavaScript (JSX)
