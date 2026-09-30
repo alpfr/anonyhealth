@@ -47,9 +47,7 @@ fi
 printf "${BOLD}Step 1: Submitting Cloud Build to Artifact Registry...${NC}\n"
 gcloud builds submit \
   --project="${PROJECT_ID}" \
-  --config=cloudbuild.yaml \
-  --substitutions=COMMIT_SHA="${TAG}" \
-  --quiet
+  --config=cloudbuild.yaml
 
 printf "\n${BOLD}Step 2: Verifying Cloud Run Service Status...${NC}\n"
 SERVICE_URL=$(gcloud run services describe "${SERVICE_NAME}" \

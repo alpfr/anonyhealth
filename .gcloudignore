@@ -1,0 +1,11 @@
+.git
+.gcloudignore
+.gitignore
+node_modules/
+dist/
+.venv/
+playwright-report/
+test-results/
+.claude/
+.DS_Store
+*.log
