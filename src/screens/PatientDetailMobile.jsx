@@ -3,7 +3,7 @@ import { useTenant } from "../context/TenantContext";
 import { T } from "../constants/theme";
 import { MobileNav } from "../components/MobileNav";
 import { getPatientHistory } from "../services/doctor";
-import { calculateJevRiskBand, getRiskBandTheme, generateSoapNote } from "../utils/jevReflex";
+import { calculateJevRiskBand, getRiskBandTheme, generateSoapNote, generateFhirEncounter } from "../utils/jevReflex";
 
 function severityColor(sev) {
   if (sev == null) return "#64748b";
@@ -43,6 +43,23 @@ export const PatientDetailMobile = ({ theme, patientUserId, onBack, onMessage })
     } catch {
       alert("Clipboard access unavailable. Opening note view instead.");
       setViewSoapLog(log);
+    }
+  };
+
+  const handleDownloadFhir = (log) => {
+    try {
+      const bundle = generateFhirEncounter(log, profile);
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/fhir+json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `fhir_encounter_${log.id || "export"}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Failed to export FHIR JSON bundle.");
     }
   };
 
@@ -159,6 +176,18 @@ export const PatientDetailMobile = ({ theme, patientUserId, onBack, onMessage })
                 </button>
 
                 <button
+                  onClick={() => handleDownloadFhir(log)}
+                  title="Download HL7 FHIR JSON Bundle"
+                  style={{
+                    padding: "8px 12px", borderRadius: 8, border: `1px solid ${t.border}`,
+                    background: "transparent", color: t.textSec,
+                    fontSize: 12, fontWeight: 500, cursor: "pointer",
+                  }}
+                >
+                  FHIR JSON
+                </button>
+
+                <button
                   onClick={() => setViewSoapLog(log)}
                   style={{
                     padding: "8px 12px", borderRadius: 8, border: `1px solid ${t.border}`,
@@ -220,6 +249,15 @@ export const PatientDetailMobile = ({ theme, patientUserId, onBack, onMessage })
                   }}
                 >
                   {copiedSoapId === viewSoapLog.id ? "✓ Copied to Clipboard" : "Copy to Clipboard"}
+                </button>
+                <button
+                  onClick={() => handleDownloadFhir(viewSoapLog)}
+                  style={{
+                    padding: "10px 14px", borderRadius: 10, border: `1px solid ${t.border}`,
+                    background: "transparent", color: t.text, fontSize: 13, fontWeight: 500, cursor: "pointer",
+                  }}
+                >
+                  Download FHIR JSON
                 </button>
                 <button
                   onClick={() => setViewSoapLog(null)}

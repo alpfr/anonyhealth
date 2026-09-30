@@ -6,6 +6,8 @@ import {
   calculateJevRiskBand,
   getRiskBandTheme,
   generateSoapNote,
+  suggestBillingCodes,
+  generateFhirEncounter,
 } from "../../src/utils/jevReflex.js";
 
 describe("Jev System 1 Clinical Safety Engine", () => {
@@ -140,6 +142,81 @@ describe("Jev System 1 Clinical Safety Engine", () => {
       assert.ok(note.includes("A (ASSESSMENT):"));
       assert.ok(note.includes("P (PLAN):"));
       assert.ok(note.includes("Return Precautions / Safety Netting"));
+      assert.ok(note.includes("BILLING & CODING DECISION SUPPORT"));
+      assert.ok(note.includes("CPT: 99422"));
+      assert.ok(note.includes("R05.9"));
+    });
+  });
+
+  describe("Bilingual Spanish & Pediatric Safety Triggers", () => {
+    it("intercepts Spanish cardiac presentation (dolor opresivo en el pecho)", () => {
+      const result = evaluateEmergencyReflex("Tengo un dolor y opresión muy fuerte en el pecho");
+      assert.ok(result);
+      assert.strictEqual(result.triggerCode, "ACUTE_CORONARY_SYNDROME_ES");
+      assert.strictEqual(result.riskBand, "CRITICAL");
+    });
+
+    it("intercepts Spanish stroke FAST trigger (parálisis facial y habla trabada)", () => {
+      const result = evaluateEmergencyReflex("Mi padre tiene parálisis facial repentina");
+      assert.ok(result);
+      assert.strictEqual(result.triggerCode, "STROKE_FACIAL_DROOP_ES");
+    });
+
+    it("intercepts Spanish respiratory crisis (no puedo respirar)", () => {
+      const result = evaluateEmergencyReflex("Ayuda, no puedo respirar bien");
+      assert.ok(result);
+      assert.strictEqual(result.triggerCode, "ACUTE_RESPIRATORY_FAILURE_ES");
+    });
+
+    it("intercepts Spanish suicidal crisis (me quiero morir)", () => {
+      const result = evaluateEmergencyReflex("Ya no aguanto más y me quiero morir");
+      assert.ok(result);
+      assert.strictEqual(result.triggerCode, "PSYCHIATRIC_CRISIS_ES");
+    });
+
+    it("intercepts pediatric infant fever trigger (infant with fever 101F)", () => {
+      const result = evaluateEmergencyReflex("My 6-week old baby has a fever of 101F");
+      assert.ok(result);
+      assert.strictEqual(result.triggerCode, "PEDIATRIC_FEVER_CRITICAL");
+      assert.strictEqual(result.riskBand, "CRITICAL");
+    });
+  });
+
+  describe("Telehealth Billing Assist & FHIR R4 Bundle Export", () => {
+    it("suggests CPT 99423 and high complexity for severity >= 7", () => {
+      const log = { severity: 8, symptom: "Severe migraine headache" };
+      const billing = suggestBillingCodes(log);
+      assert.strictEqual(billing.cpt, "99423");
+      assert.strictEqual(billing.icd10, "R51.9");
+    });
+
+    it("synthesizes valid HL7 FHIR R4 document bundle", () => {
+      const log = {
+        id: "log-789",
+        symptom: "Severe throat pain and swallowing difficulty",
+        severity: 7,
+        urgency: "urgent",
+        ai_advice: "Possible streptococcal pharyngitis. In-person clinical culture advised.",
+        created_at: "2026-09-30T17:00:00Z",
+      };
+      const profile = {
+        user_id: "usr-456",
+        full_name: "Carlos Santana",
+      };
+
+      const bundle = generateFhirEncounter(log, profile);
+      assert.strictEqual(bundle.resourceType, "Bundle");
+      assert.strictEqual(bundle.type, "document");
+      assert.strictEqual(bundle.entry.length, 2);
+
+      const composition = bundle.entry[0].resource;
+      assert.strictEqual(composition.resourceType, "Composition");
+      assert.strictEqual(composition.status, "final");
+      assert.strictEqual(composition.subject.display, "Carlos Santana");
+
+      const observation = bundle.entry[1].resource;
+      assert.strictEqual(observation.resourceType, "Observation");
+      assert.strictEqual(observation.valueString, "HIGH");
     });
   });
 });
