@@ -1,6 +1,10 @@
 # AnonyHealth
 
-**Privacy-first Healthcare Triage Prototype**
+**Privacy-first Healthcare Triage Platform with Jev System 1 Clinical Safety Engine**
+
+<p align="center">
+  <img src="docs/images/anonyhealth_jev_architecture.jpg" alt="AnonyHealth Jev System 1 Clinical Cognitive Architecture" width="100%" />
+</p>
 
 AnonyHealth connects patients with healthcare providers while maintaining strict privacy standards. It features a confidential AI symptom checker, provider directory, health history tracking, and secure patient authentication with Maryland telehealth compliance.
 
