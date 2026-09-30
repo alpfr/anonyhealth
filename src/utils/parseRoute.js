@@ -32,6 +32,7 @@ export function parseRoute() {
   if (path === "/hipaa") return { kind: "legal", page: "hipaa" };
 
   if (path === "/for-providers") return { kind: "landing" };
+  if (path === "/simulation" || path === "/demo") return { kind: "simulation" };
   if (path === "/signup") return { kind: "auth", mode: "signup" };
   if (path === "/signin") return { kind: "auth", mode: "signin" };
 

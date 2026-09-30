@@ -906,6 +906,21 @@ export const AuthGate = ({
                   </button>
                 )}
 
+                <a
+                  href="/simulation.html"
+                  style={{
+                    display: "block",
+                    marginTop: 12,
+                    color: "#2563eb",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    textDecoration: "none",
+                    textAlign: "center",
+                  }}
+                >
+                  🎮 Interactive Clinical Simulator & Demo →
+                </a>
+
                 {/* Provider-specific helper link. */}
                 {isProviderRole && mode === "signin" && (
                   <a

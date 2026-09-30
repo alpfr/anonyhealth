@@ -79,6 +79,12 @@ export default function AnonyHealthApp() {
     );
   }
 
+  // Interactive Workflow Simulation — accessible via /simulation or /demo.
+  if (route.kind === "simulation") {
+    window.location.replace("/simulation.html");
+    return null;
+  }
+
   // Main app: AuthGate → TenantGate → PatientApp (or DoctorApp via TenantGate).
   //
   // Tier rules:

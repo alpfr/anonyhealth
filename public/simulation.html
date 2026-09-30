@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AnonyHealth — Interactive Clinical Workflow Simulation</title>
+  <meta name="description" content="Interactive end-to-end simulation of AnonyHealth's anonymous patient intake, Jev System 1 Clinical Reflex Intercept, multi-agent AI triage, and provider SOAP note generation.">
+  <link rel="stylesheet" href="./simulation.css">
+  <link rel="icon" type="image/svg+xml" href="./vite.svg">
+</head>
+<body>
+
+  <!-- Top Navbar -->
+  <header class="sim-header" role="banner">
+    <div class="brand-wrapper">
+      <div class="brand-icon">🛡️</div>
+      <div>
+        <div class="brand-title">AnonyHealth</div>
+        <div style="font-size: 11px; color: var(--text-dim);">Zero-Knowledge Clinical Simulator</div>
+      </div>
+      <span class="brand-badge">Jev System 1: ACTIVE (0ms)</span>
+    </div>
+
+    <div class="sim-controls-top">
+      <div class="btn-toggle-view" role="group" aria-label="Perspective View Toggle">
+        <button class="btn-view-opt active" data-view="dual" id="viewDualBtn">⚡ Dual View</button>
+        <button class="btn-view-opt" data-view="patient" id="viewPatientBtn">📱 Patient Mobile</button>
+        <button class="btn-view-opt" data-view="doctor" id="viewDoctorBtn">💻 Doctor Portal</button>
+      </div>
+
+      <button class="theme-toggle-btn" id="themeToggle" title="Toggle Light/Dark Theme" aria-label="Toggle theme">
+        ☀️
+      </button>
+
+      <a href="/" class="sim-btn sim-btn-secondary" style="text-decoration: none; padding: 6px 12px; font-size: 12px;">
+        ← Back to Live App
+      </a>
+    </div>
+  </header>
+
+  <!-- Story Progress & Narrative Bar -->
+  <section class="story-bar" aria-label="Simulation Steps Navigation">
+    <div class="story-steps-container" id="stepsContainer">
+      <div class="story-step-item active" data-step="0">
+        <span class="step-num-badge">1</span>
+        <span>Anonymous Intake</span>
+      </div>
+      <div class="story-step-item" data-step="1">
+        <span class="step-num-badge">2</span>
+        <span>Jev Emergency Reflex</span>
+      </div>
+      <div class="story-step-item" data-step="2">
+        <span class="step-num-badge">3</span>
+        <span>Bilingual & FAST Protocol</span>
+      </div>
+      <div class="story-step-item" data-step="3">
+        <span class="step-num-badge">4</span>
+        <span>Multi-Agent AI Triage</span>
+      </div>
+      <div class="story-step-item" data-step="4">
+        <span class="step-num-badge">5</span>
+        <span>SOAP Note & FHIR Export</span>
+      </div>
+    </div>
+
+    <div class="narrative-banner">
+      <div class="narrative-content">
+        <span class="narrative-icon" id="narrativeIcon">💡</span>
+        <div>
+          <span class="narrative-title" id="narrativeTitle">Zero-Knowledge Anonymous Entry</span>
+          <span class="narrative-desc" id="narrativeDesc">
+            Patients access HIPAA-grade triage instantly without email, password, or device tracking. Zero personal identifiers are stored.
+          </span>
+        </div>
+      </div>
+
+      <div class="playback-controls">
+        <button class="sim-btn sim-btn-secondary" id="btnPrev" title="Previous step">
+          ◀ Prev
+        </button>
+        <button class="sim-btn" id="btnPlayPause">
+          <span>▶️</span> Auto-Play Tour
+        </button>
+        <button class="sim-btn sim-btn-secondary" id="btnNext" title="Next step">
+          Next ▶
+        </button>
+        <button class="sim-btn sim-btn-secondary" id="btnReset" title="Restart simulation">
+          🔄 Reset
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Scenario Presets Bar -->
+  <nav class="scenario-bar" aria-label="Test Scenarios">
+    <span class="scenario-label">Quick Test Scenarios:</span>
+    <button class="scenario-chip active" data-scenario="cardiac" id="scenarioCardiac">
+      🚨 Acute Chest Pain (Cardiac)
+    </button>
+    <button class="scenario-chip" data-scenario="spanish" id="scenarioSpanish">
+      🇪🇸 Dolor Opresivo (Bilingual ES)
+    </button>
+    <button class="scenario-chip" data-scenario="pediatric" id="scenarioPediatric">
+      👶 Neonatal Fever (&lt;60 Days)
+    </button>
+    <button class="scenario-chip" data-scenario="headache" id="scenarioHeadache">
+      🤕 Tension Headache (Routine AI)
+    </button>
+  </nav>
+
+  <!-- Main Stage Simulation Area -->
+  <main class="sim-stage" data-view="dual">
+
+    <!-- Left Stage: Mobile Patient Device Simulation -->
+    <div class="mobile-device-wrapper">
+      <div class="device-header-label">
+        <span>📱 Patient Mobile Interface (Encrypted Session)</span>
+      </div>
+
+      <div class="mobile-phone-frame">
+        <div class="phone-screen">
+          <!-- Notch & Status Bar -->
+          <div class="phone-notch">
+            <span>9:41</span>
+            <div class="notch-pill"></div>
+            <span>5G 🔋</span>
+          </div>
+
+          <!-- Dynamic Screen Content -->
+          <div class="app-screen-content" id="phoneScreenContent">
+            <!-- Rendered dynamically by simulation.js -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Stage: Clinical Architecture & Doctor Dashboard -->
+    <div class="clinical-dashboard-panel">
+
+      <!-- Real-Time Metrics Strip -->
+      <div class="metrics-strip">
+        <div class="metric-card">
+          <span class="metric-label">Execution Latency</span>
+          <div class="metric-value" id="metricLatency">
+            0.00ms <span class="metric-badge green">IDLE</span>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <span class="metric-label">LLM Token Cost</span>
+          <div class="metric-value" id="metricCost">
+            $0.0000 <span class="metric-badge green">100% FREE</span>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <span class="metric-label">Jev Risk Classification</span>
+          <div class="metric-value" id="metricRisk">
+            PENDING <span class="metric-badge cyan">--/100</span>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <span class="metric-label">Active Clinical Rule</span>
+          <div class="metric-value" style="font-size: 13px; font-family: var(--code-font);" id="metricRule">
+            WAITING_INPUT
+          </div>
+        </div>
+      </div>
+
+      <!-- Doctor Review Container -->
+      <div class="dash-content-box">
+        <div class="content-box-header">
+          <div class="box-title-group">
+            <span style="font-size: 20px;">🩺</span>
+            <div>
+              <div style="font-weight: 700; font-size: 15px;">Dr. Evelyn Reed, MD — Telehealth Review</div>
+              <div style="font-size: 11px; color: var(--text-dim);">Anonymized Clinical Inbox • HIPAA Dual-Vault Ingestion</div>
+            </div>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="risk-band-pill moderate" id="riskPill">INSPECTION ACTIVE</span>
+            <button class="sim-btn sim-btn-secondary" id="btnCopyContent" style="padding: 5px 10px; font-size: 11px;">
+              📋 Copy Data
+            </button>
+          </div>
+        </div>
+
+        <!-- Dashboard Sub-Tabs -->
+        <div class="dashboard-tabs-bar">
+          <button class="dash-tab-btn active" data-tab="soap" id="tabSoap">
+            📄 Clinical SOAP Note
+          </button>
+          <button class="dash-tab-btn" data-tab="fhir" id="tabFhir">
+            🧬 HL7 FHIR R4 Bundle
+          </button>
+          <button class="dash-tab-btn" data-tab="billing" id="tabBilling">
+            💳 Telehealth Billing (CPT)
+          </button>
+          <button class="dash-tab-btn" data-tab="telemetry" id="tabTelemetry">
+            ⚙️ System 1 Architecture
+          </button>
+        </div>
+
+        <!-- Dynamic Tab Body -->
+        <div id="dashContentBody">
+          <!-- Rendered dynamically by simulation.js -->
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <script src="./simulation.js"></script>
+</body>
+</html>
