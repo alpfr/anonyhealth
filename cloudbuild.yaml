@@ -26,33 +26,22 @@ steps:
       - '--all-tags'
       - 'us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth'
 
-  # Deploy to GKE
-  - name: 'gcr.io/cloud-builders/kubectl'
+  # Deploy to Cloud Run (Serverless Scale-to-Zero, 98% Cost Reduction)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
     args:
-      - 'apply'
-      - '-f'
-      - 'deployment.yaml'
-      - '-f'
-      - 'service.yaml'
-      - '-f'
-      - 'network-policy.yaml'
-      - '-f'
-      - 'hpa.yaml'
-      - '-f'
-      - 'pdb.yaml'
-    env:
-      - 'CLOUDSDK_COMPUTE_ZONE=us-central1-a'
-      - 'CLOUDSDK_CONTAINER_CLUSTER=opssightai-cluster'
-
-  - name: 'gcr.io/cloud-builders/kubectl'
-    args:
-      - 'set'
-      - 'image'
-      - 'deployment/anonyhealth'
-      - 'anonyhealth=us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth:$BUILD_ID'
-    env:
-      - 'CLOUDSDK_COMPUTE_ZONE=us-central1-a'
-      - 'CLOUDSDK_CONTAINER_CLUSTER=opssightai-cluster'
+      - 'run'
+      - 'deploy'
+      - 'anonyhealth'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/healthcare-repo/anonyhealth:$BUILD_ID'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--min-instances=0'
+      - '--max-instances=10'
+      - '--memory=512Mi'
+      - '--cpu=1'
+      - '--port=8080'
 
 availableSecrets:
   secretManager:

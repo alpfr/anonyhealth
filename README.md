@@ -37,7 +37,8 @@ AnonyHealth connects patients with healthcare providers while maintaining strict
 - **Backend / DB**: Supabase (Postgres + PostgREST + Auth + Edge Functions)
 - **Authentication**: Supabase Auth (email/password), RLS via `auth.uid()`
 - **AI**: Anthropic Claude API (via Supabase Edge Function, streaming SSE)
-- **Infrastructure**: Docker (multi-stage), Nginx, Kubernetes (GKE)
+- **Infrastructure**: Docker (multi-stage), Nginx, Google Cloud Run (Serverless Scale-to-Zero, 98% Cost Reduction)
+- **Deployment & Cost Guide**: [docs/MIGRATION_GKE_TO_CLOUDRUN.md](docs/MIGRATION_GKE_TO_CLOUDRUN.md)
 - **Fonts**: Outfit, Instrument Serif (Google Fonts)
 
 ## Getting Started

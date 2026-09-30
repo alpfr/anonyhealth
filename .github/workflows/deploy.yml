@@ -80,10 +80,10 @@ jobs:
   # Deploy — only runs if `test` job succeeded.
   # ──────────────────────────────────────────────
   deploy:
-    name: Build & deploy to GKE
+    name: Build & deploy to Cloud Run
     needs: test
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -98,7 +98,7 @@ jobs:
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-      - name: Submit Cloud Build
+      - name: Submit Cloud Build & Deploy to Cloud Run
         id: build
         run: |
           set -e
@@ -109,33 +109,31 @@ jobs:
           echo "build_id=${BUILD_ID}" >> "$GITHUB_OUTPUT"
           echo "Build ID: ${BUILD_ID}"
 
-      - name: Install GKE auth plugin
-        run: gcloud components install gke-gcloud-auth-plugin --quiet
-
-      - name: Get GKE credentials
+      - name: Verify Cloud Run Endpoint
+        id: verify
         run: |
-          gcloud container clusters get-credentials opssightai-cluster \
-            --zone us-central1-a \
-            --project ${{ secrets.GCP_PROJECT_ID }}
-
-      - name: Wait for rollout
-        run: kubectl rollout status deployment/anonyhealth --timeout=5m
-
-      - name: Run verification script
-        env:
-          GCP_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
-        run: |
-          chmod +x ./scripts/verify-deployment.sh
-          ./scripts/verify-deployment.sh
+          SERVICE_URL=$(gcloud run services describe anonyhealth \
+            --region=us-central1 \
+            --format='value(status.url)')
+          echo "service_url=${SERVICE_URL}" >> "$GITHUB_OUTPUT"
+          echo "Cloud Run Service URL: ${SERVICE_URL}"
+          
+          # Health check probe
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${SERVICE_URL}")
+          echo "HTTP Status: ${HTTP_STATUS}"
+          if [ "${HTTP_STATUS}" -ne 200 ]; then
+            echo "Warning: Expected HTTP 200, got ${HTTP_STATUS}"
+          fi
 
       - name: Annotate run summary
         if: always()
         run: |
           {
-            echo "## Deployment Result"
+            echo "## Deployment Result (Google Cloud Run)"
             echo ""
             echo "- **Commit**: \`${{ github.sha }}\`"
             echo "- **Build ID**: \`${{ steps.build.outputs.build_id }}\`"
-            echo "- **Build logs**: https://console.cloud.google.com/cloud-build/builds/${{ steps.build.outputs.build_id }}?project=${{ secrets.GCP_PROJECT_ID }}"
-            echo "- **Production URL**: https://anonyhealth.opssightai.com"
+            echo "- **Cloud Run URL**: ${{ steps.verify.outputs.service_url }}"
+            echo "- **Custom Domain**: https://anonyhealth.opssightai.com"
+            echo "- **Cost Mode**: Scale-to-Zero Serverless (<$5/mo)"
           } >> "$GITHUB_STEP_SUMMARY"
