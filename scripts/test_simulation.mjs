@@ -13,9 +13,9 @@ async function testSimulation() {
   page.on("console", (msg) => console.log("SIM LOG:", msg.text()));
   page.on("pageerror", (err) => console.log("SIM ERROR:", err.message));
 
-  const simPath = "file://" + path.resolve("dist/simulation.html");
-  console.log(`Navigating to ${simPath}...`);
-  await page.goto(simPath, { waitUntil: "networkidle" });
+  const targetUrl = process.env.SIM_URL || ("file://" + path.resolve("dist/simulation.html"));
+  console.log(`Navigating to ${targetUrl}...`);
+  await page.goto(targetUrl, { waitUntil: "networkidle" });
 
   const outDir = path.resolve("docs/images/simulation");
   if (!fs.existsSync(outDir)) {
