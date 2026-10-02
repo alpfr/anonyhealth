@@ -6,11 +6,11 @@
 // Anywhere you see {{PLACEHOLDER}}, replace with your actual values.
 
 const COMPANY_LEGAL_NAME = "ALPFR LLC";
-const COMPANY_ADDRESS = "{{6214 Autumn Haven Ct, Hanover, MD 21076}}";
-const PRIVACY_EMAIL = "{{privacy@alpfr.com}}"; // e.g. privacy@anonyhealth.com
-const SUPPORT_EMAIL = "{{admin@alpfr.com}}";
+const COMPANY_ADDRESS = "6214 Autumn Haven Ct, Hanover, MD 21076";
+const PRIVACY_EMAIL = "privacy@alpfr.com";
+const SUPPORT_EMAIL = "support@alpfr.com";
 const PHI_RETENTION_YEARS = "6";
-const EFFECTIVE_DATE = "{{April 24, 2026}}"; // e.g. "April 24, 2026"
+const EFFECTIVE_DATE = "October 2, 2026";
 
 const TERMS = `
 # Terms of Service
@@ -54,7 +54,7 @@ The service is provided "as is" and "as available". We disclaim all warranties t
 To the maximum extent permitted by law, our aggregate liability for any claim arising under these Terms is limited to the fees you paid us in the 12 months prior to the event giving rise to the claim. Neither party will be liable for indirect, special, or consequential damages.
 
 ## 11. Governing law and disputes
-These Terms are governed by the laws of {{STATE_OR_JURISDICTION}}, without regard to conflict of laws. Disputes will be resolved in the state or federal courts located in {{COURT_VENUE}}, except where prohibited by law.
+These Terms are governed by the laws of the State of Maryland, without regard to conflict of laws. Disputes will be resolved in the state or federal courts located in Anne Arundel County, Maryland, except where prohibited by law.
 
 ## 12. Changes
 We may update these Terms. We will provide at least 14 days' notice (by email or in-app) for material changes. Continued use after the effective date constitutes acceptance.
