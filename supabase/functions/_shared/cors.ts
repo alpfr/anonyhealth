@@ -12,12 +12,24 @@
 // `a.b.opssightai.com`. Use multiple wildcards for multi-level subdomains:
 //   "https://*.*.opssightai.com"
 //
-// An empty list denies all browser origins.
+// Fallback allowed origins if ALLOWED_ORIGINS env var is not explicitly set
+const DEFAULT_ALLOWED_ORIGINS = [
+    "https://anonyhealth.opssightai.com",
+    "https://*.opssightai.com",
+    "https://anonyhealth-cg4uqokewq-uc.a.run.app",
+    "https://*.a.run.app",
+    "https://anonyhealth.alpfr.com",
+    "https://*.alpfr.com",
+    "http://localhost:*",
+    "http://127.0.0.1:*"
+];
 
-const PATTERN_SOURCES = (Deno.env.get("ALLOWED_ORIGINS") ?? "")
+const envOrigins = (Deno.env.get("ALLOWED_ORIGINS") ?? "")
     .split(",")
     .map((o) => o.trim())
     .filter(Boolean);
+
+const PATTERN_SOURCES = envOrigins.length > 0 ? envOrigins : DEFAULT_ALLOWED_ORIGINS;
 
 function patternToRegExp(pattern: string): RegExp {
     // 1. Escape every regex metacharacter — including `*` itself — so the

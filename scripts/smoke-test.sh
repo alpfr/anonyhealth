@@ -27,7 +27,7 @@ set -uo pipefail
 BASE_URL="${BASE_URL:-https://anonyhealth.opssightai.com}"
 SUPABASE_URL="${SUPABASE_URL:-https://exzmdnnkbjjgrtwnjemm.supabase.co}"
 SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY:-sb_publishable_d_Ne0ShtZcpy14D5N3zG3Q_rtLpr2lI}"
-SKIP_GKE=false
+SKIP_CLOUDRUN=false
 SKIP_AGENTS=false
 
 # ─── Arg parsing ──────────────────────────────────────────
@@ -35,7 +35,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --base-url) BASE_URL="$2"; shift 2 ;;
         --supabase-url) SUPABASE_URL="$2"; shift 2 ;;
-        --skip-gke) SKIP_GKE=true; shift ;;
+        --skip-cloudrun|--skip-gke) SKIP_CLOUDRUN=true; shift ;;
         --skip-agents) SKIP_AGENTS=true; shift ;;
         --help|-h)
             sed -n '3,22p' "$0" | sed 's/^# \{0,1\}//'
@@ -128,7 +128,7 @@ done
 # ─── 3. Supabase reachability ─────────────────────────────
 section "Supabase backend"
 
-supabase_status=$(curl -s -o /dev/null -w "%{http_code}" "$SUPABASE_URL/auth/v1/health")
+supabase_status=$(curl -s -o /dev/null -w "%{http_code}" -H "apikey: $SUPABASE_ANON_KEY" "$SUPABASE_URL/auth/v1/health")
 if [[ "$supabase_status" == "200" ]] || [[ "$supabase_status" == "404" ]]; then
     # 404 is also OK — endpoint may not exist, but the project responded.
     pass "Supabase project reachable (HTTP $supabase_status)"
@@ -270,35 +270,20 @@ else
     info "Got: $bad_cors"
 fi
 
-# ─── 8. GKE cluster (optional) ────────────────────────────
-section "GKE cluster"
+# ─── 8. Cloud Run service (optional) ──────────────────────
+section "Cloud Run service"
 
-if [[ "$SKIP_GKE" == "true" ]]; then
-    skip "GKE checks (--skip-gke)"
+if [[ "$SKIP_CLOUDRUN" == "true" ]]; then
+    skip "Cloud Run checks (--skip-cloudrun)"
 elif ! command -v gcloud >/dev/null 2>&1; then
-    skip "GKE checks (gcloud not installed)"
-elif ! command -v kubectl >/dev/null 2>&1; then
-    skip "GKE checks (kubectl not installed)"
+    skip "Cloud Run checks (gcloud not installed)"
 else
-    pods=$(kubectl get pods -l app=anonyhealth --no-headers 2>/dev/null || echo "")
-    if [[ -z "$pods" ]]; then
-        skip "kubectl not connected to cluster (run: gcloud container clusters get-credentials ...)"
+    service_ready=$(gcloud run services describe anonyhealth --region=us-central1 --project=alpfr-splunk-integration --format="value(status.conditions[0].status)" 2>/dev/null || echo "")
+    if [[ "$service_ready" == "True" ]]; then
+        active_rev=$(gcloud run services describe anonyhealth --region=us-central1 --project=alpfr-splunk-integration --format="value(status.latestReadyRevisionName)" 2>/dev/null || echo "")
+        pass "Cloud Run service is Ready (Revision: $active_rev)"
     else
-        ready=$(echo "$pods" | awk '{print $2}' | grep -c "^1/1$" || true)
-        total=$(echo "$pods" | wc -l | tr -d ' ')
-        if [[ "$ready" == "$total" ]] && [[ "$total" -gt 0 ]]; then
-            pass "All $total pods ready (1/1)"
-        else
-            fail "Only $ready of $total pods ready"
-            info "$pods"
-        fi
-
-        # Check that the deployed image matches a recent successful build
-        deployed_image=$(kubectl get deployment anonyhealth -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "")
-        if [[ -n "$deployed_image" ]]; then
-            short=$(echo "$deployed_image" | awk -F: '{print substr($NF, 1, 8)}')
-            info "Deployed image: ...:$short"
-        fi
+        fail "Cloud Run service is not ready (status: $service_ready)"
     fi
 fi
 
