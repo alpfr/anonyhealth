@@ -48,6 +48,10 @@ Experience the interactive clinical workflow simulator without needing backend c
 </p>
 <p align="center"><i>See <a href="docs/PRESENTATION_GUIDE.md">docs/PRESENTATION_GUIDE.md</a> for the full slide-by-slide pitch and live demonstration script.</i></p>
 
+## 📋 Market Readiness & Production Recommendations
+
+For an in-depth audit of the platform's commercial readiness, HIPAA compliance requirements, production gates, and go-to-market plan, see [**RECOMMENDATIONS.md**](RECOMMENDATIONS.md).
+
 ## Tech Stack
 
 - **Frontend**: React 19, Vite 7, JavaScript (JSX)
