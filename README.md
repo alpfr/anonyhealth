@@ -48,6 +48,12 @@ Experience the interactive clinical workflow simulator without needing backend c
 </p>
 <p align="center"><i>See <a href="docs/PRESENTATION_GUIDE.md">docs/PRESENTATION_GUIDE.md</a> for the full slide-by-slide pitch and live demonstration script.</i></p>
 
+### 4. Client & Provider Application Flow Diagram
+<p align="center">
+  <img src="docs/images/anonyhealth_application_flow_provider_client.jpg" alt="AnonyHealth Client & Provider Application Flow Diagram" width="100%" />
+</p>
+<p align="center"><i>See <a href="docs/APPLICATION_FLOW_GUIDE.md">docs/APPLICATION_FLOW_GUIDE.md</a> for the full step-by-step usage specification, sequence diagrams, and EHR integration details.</i></p>
+
 ## 📋 Market Readiness & Production Recommendations
 
 For an in-depth audit of the platform's commercial readiness, HIPAA compliance requirements, production gates, and go-to-market plan, see [**RECOMMENDATIONS.md**](RECOMMENDATIONS.md).
