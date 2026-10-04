@@ -54,6 +54,12 @@ Experience the interactive clinical workflow simulator without needing backend c
 </p>
 <p align="center"><i>See <a href="docs/APPLICATION_FLOW_GUIDE.md">docs/APPLICATION_FLOW_GUIDE.md</a> for the full step-by-step usage specification, sequence diagrams, and EHR integration details.</i></p>
 
+### 5. First-Time User & Provider Training Navigation Guide
+<p align="center">
+  <img src="docs/images/anonyhealth_first_time_training_guide.jpg" alt="AnonyHealth First-Time User & Provider Training Navigation Guide" width="100%" />
+</p>
+<p align="center"><i>See <a href="docs/FIRST_TIME_NAVIGATION_TRAINING.md">docs/FIRST_TIME_NAVIGATION_TRAINING.md</a> for the complete step-by-step training manual for both patients and healthcare providers.</i></p>
+
 ## 📋 Market Readiness & Production Recommendations
 
 For an in-depth audit of the platform's commercial readiness, HIPAA compliance requirements, production gates, and go-to-market plan, see [**RECOMMENDATIONS.md**](RECOMMENDATIONS.md).
