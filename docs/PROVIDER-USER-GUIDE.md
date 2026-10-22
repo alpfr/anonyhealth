@@ -9,6 +9,8 @@
 
 AnonyHealth is a private telehealth platform that lets you manage patients, respond to appointment requests, send direct messages, and configure your practice profile — all from a mobile-first dashboard.
 
+![Provider Journey — full workflow from signup to patient care and practice management](images/provider-workflow.jpg)
+
 ---
 
 ## Getting Started as a Provider

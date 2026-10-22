@@ -9,6 +9,8 @@
 
 AnonyHealth is a private telehealth platform that lets you get AI-powered health guidance and connect securely with your provider — without requiring you to create an account first.
 
+![Patient Journey — full workflow from anonymous triage to connected care](images/patient-workflow.jpg)
+
 ---
 
 ## Getting Started
