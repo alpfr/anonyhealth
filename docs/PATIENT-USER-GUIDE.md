@@ -13,6 +13,8 @@ AnonyHealth is a private telehealth platform that lets you get AI-powered health
 
 ## Getting Started
 
+![Welcome screen — tap Start anonymous triage to try without signing up](images/welcome-screen.jpg)
+
 ### Option A — Try it anonymously (no sign-up required)
 
 You can use the AI Triage tool **without creating an account**. This is useful if you want to describe your symptoms and get an initial health assessment before deciding to connect with a provider.
@@ -44,6 +46,8 @@ Patient accounts are **invite-only** — you can only create a patient account a
 
 ## Your Dashboard
 
+![Patient dashboard — provider banner, AI triage, and recent session history](images/patient-dashboard.jpg)
+
 After signing in, your dashboard shows:
 
 | Section | What it does |
@@ -57,6 +61,8 @@ After signing in, your dashboard shows:
 ---
 
 ## AI Triage Chat
+
+![AI Triage chat — intake conversation leading to a triage assessment with severity score](images/ai-triage-chat.jpg)
 
 The AI Triage tool uses a two-step process:
 
@@ -79,6 +85,8 @@ Once enough information is gathered, a triage agent delivers:
 ---
 
 ## Booking an Appointment
+
+![Book appointment form — preferred date, time of day, urgency, and reason for visit](images/book-appointment.jpg)
 
 ### How to submit a request
 

@@ -70,6 +70,8 @@ Each patient must be individually invited — patients cannot self-register. Thi
 
 ## Provider Dashboard
 
+![Provider dashboard — practice overview, Jev safety status, patient invite, and appointment requests](images/provider-dashboard.jpg)
+
 Your dashboard gives you an overview of your practice:
 
 | Section | What it shows |
@@ -83,6 +85,8 @@ Your dashboard gives you an overview of your practice:
 ---
 
 ## Managing Appointment Requests
+
+![Appointment requests — confirm, propose a new time, or decline each patient request](images/appointment-requests.jpg)
 
 Patients use the built-in form to request appointments. You receive all requests in one place.
 
