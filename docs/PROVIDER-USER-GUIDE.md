@@ -54,14 +54,19 @@ If you leave this blank, patients will use AnonyHealth's built-in appointment re
 
 ### Step 3 — Invite your first patient
 
+Each patient must be individually invited — patients cannot self-register. This protects your practice by ensuring only people you've invited can connect to your account.
+
 1. From your provider dashboard, tap **"Generate invite link"**
 2. A single-use invite link is created — valid for **7 days**
-3. Tap **"Copy link"** and share it with your patient via email, text, or any other channel
-4. When the patient opens the link and creates their account, they'll appear in your patient list
+3. Tap **"Copy link"** and share it with your patient via email, SMS, or any channel you prefer
+4. When the patient opens the link and creates their account, they'll appear in your **Patients** list automatically
 
-> Each invite link is single-use and expires after 7 days. Generate a new link for each patient.
+> **Each invite link is single-use and expires after 7 days.** If a patient's link expires before they sign up, generate a new one.
+
+> **Testing tip:** If you want to test the patient experience yourself without a second email address, you can use a **Gmail plus-alias**. For example, if your provider account uses `you@gmail.com`, generate an invite and sign up the patient side using `you+patient@gmail.com` — Gmail delivers both to the same inbox. Open the patient session in an **incognito / private browser window** so both sessions stay separate.
 
 ---
+
 
 ## Provider Dashboard
 

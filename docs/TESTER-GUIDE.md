@@ -38,6 +38,35 @@ Real personal info is only collected during sign-up.
 
 ---
 
+## Quick Start: Set Up Both Accounts
+
+Before running any test scenarios you need **two accounts** — one provider and one patient. You can do this with a single email address using the Gmail plus-alias trick.
+
+### Account setup (do this first — ~5 minutes)
+
+**Provider account**
+
+1. Open **https://anonyhealth.alpfr.com** in a normal browser window
+2. Tap **"Sign up as provider"**
+3. Sign up with your email (e.g. `you@gmail.com`) and a password
+4. Enter a practice name (e.g. "Test Practice")
+5. Go to **Settings → Provider profile** → add your name, credentials, specialty → tap **Save & close**
+
+**Patient account**
+
+1. From your provider dashboard, tap **"Generate invite link"** → tap **"Copy link"**
+2. Open a **new incognito / private window** (keeps the two sessions separate)
+3. Paste the invite link and open it
+4. Sign up with **`you+patient@gmail.com`** (or any second email) and a password
+5. You are now signed in as a patient connected to your provider
+
+> **Gmail alias tip:** `you+patient@gmail.com` is treated as the same inbox as `you@gmail.com` — both go to the same Gmail account. Verification emails for both accounts will arrive in one inbox.
+
+> **Stay organized:** Keep the **provider session in your normal browser** and the **patient session in incognito** — switch between them as you go through the scenarios below.
+
+---
+
+
 ## Scenario 1: Anonymous User Tries AI Triage (10 min)
 
 This is the most common first-time visitor flow. The platform should never

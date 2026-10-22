@@ -28,12 +28,17 @@ You can use the AI Triage tool **without creating an account**. This is useful i
 
 ### Option B — Connect with your provider (full access)
 
-If your provider has sent you an **invite link**, use it to create your account and connect directly to their practice.
+Patient accounts are **invite-only** — you can only create a patient account after your provider sends you a personal invite link. This keeps your health data private and ensures you're always connected to a real, verified provider.
 
 1. Open the invite link your provider sent you (it looks like `https://anonyhealth.alpfr.com/invite/...`)
 2. Tap **"Accept invite"**
-3. Enter your email address and create a password
-4. Your account is now connected to your provider — you can access all features
+3. Enter your **email address** and create a **password**
+4. Complete your profile (name, date of birth)
+5. Your account is now connected to your provider — you can access all features
+
+> **Don't have an invite yet?** Ask your provider to generate one from their dashboard. Each invite link is single-use and valid for 7 days.
+
+> **Tip for testers using one email:** If you're testing both roles yourself, use a Gmail plus-alias for the patient account. For example, if your email is `you@gmail.com`, use `you+patient@gmail.com` for the patient signup — Gmail delivers both to the same inbox.
 
 ---
 
