@@ -26,7 +26,8 @@ The platform has two user types:
 - This guide open in a separate window/tab
 
 ### How to set up
-1. Open the production URL: **https://anonyhealth.opssightai.com**
+1. Open the production URL: **https://anonyhealth.alpfr.com**  
+   *(Direct Cloud Run fallback if needed: https://anonyhealth-cg4uqokewq-uc.a.run.app)*
 2. Use an **incognito / private** window for each test scenario to start fresh
 3. Have your phone or tablet handy to test mobile responsiveness
 
@@ -46,7 +47,7 @@ force someone to sign up just to try the AI triage.
 
 | # | Action | Expected Result |
 |---|---|---|
-| 1.1 | Open https://anonyhealth.opssightai.com in a fresh incognito window | Page loads in under 3 seconds |
+| 1.1 | Open https://anonyhealth.alpfr.com in a fresh incognito window | Page loads in under 3 seconds |
 | 1.2 | Look at the top-right of the screen | You see a pill labeled "Anonymous" with a chevron |
 | 1.3 | Look near the top of the page | You see a banner: "You're anonymous — No personal info collected" with a "Save" button |
 | 1.4 | Look at the dashboard | You see "Talk to AI triage, privately." headline (NOT a sign-in form) |
@@ -107,7 +108,7 @@ signups should be blocked with a clear explanation.
 | # | Action | Expected Result |
 |---|---|---|
 | 3.1 | Open a **fresh incognito window** | New session |
-| 3.2 | Navigate directly to: https://anonyhealth.opssightai.com/signup | Page loads |
+| 3.2 | Navigate directly to: https://anonyhealth.alpfr.com/signup | Page loads |
 | 3.3 | Look at the role selector at the top | Two tabs: "I'm a patient" and "I'm a provider" |
 | 3.4 | Make sure "I'm a patient" is selected (it should be by default) | Active tab is highlighted |
 | 3.5 | Look at the form area | You see an **invite link** input, NOT email/password fields |
@@ -131,7 +132,7 @@ Providers should be able to sign up directly (unlike patients).
 
 | # | Action | Expected Result |
 |---|---|---|
-| 4.1 | Fresh incognito → https://anonyhealth.opssightai.com/signup | Page loads |
+| 4.1 | Fresh incognito → https://anonyhealth.alpfr.com/signup | Page loads |
 | 4.2 | Switch the role toggle to "I'm a provider" | Active tab changes |
 | 4.3 | Look at the helper copy | Mentions "Healthcare providers" or similar |
 | 4.4 | Email/password fields should now be visible | Form ready for input |
@@ -175,7 +176,7 @@ Open the site on your phone or use browser DevTools' mobile view.
 
 | # | Action | Expected Result |
 |---|---|---|
-| 6.1 | Open https://anonyhealth.opssightai.com on your phone | Page loads, fits the screen, no horizontal scroll |
+| 6.1 | Open https://anonyhealth.alpfr.com on your phone | Page loads, fits the screen, no horizontal scroll |
 | 6.2 | Tap "Chat" → start a triage session | Chat input is reachable; keyboard doesn't cover it |
 | 6.3 | Type a message and watch for AI response | Streaming response is smooth |
 | 6.4 | Scroll up to see earlier messages | Smooth scrolling, no jank |
@@ -185,7 +186,7 @@ Open the site on your phone or use browser DevTools' mobile view.
 ### Things to verify
 - [ ] No layout breaks on phone-sized screens (test both iPhone and Android if possible)
 - [ ] Touch targets are at least 44x44px (standard iOS guideline)
-- [ ] Text is legible without zooming
+- [ ] Touch targets are easy to tap
 - [ ] Forms scroll properly when keyboard is open
 
 ---
@@ -203,12 +204,72 @@ These are quick checks to verify the privacy claims hold up.
 | 7.3 | Look at the request body for the `/functions/v1/intake` call | Body contains "I have a sore throat" — confirms it's going to YOUR Supabase, not a third party |
 | 7.4 | Check the request URL — should be `*.supabase.co` | Domain matches your project |
 | 7.5 | Look at Console tab for errors | No errors logged during normal use |
-| 7.6 | Try opening https://anonyhealth.opssightai.com with HTTP (replace https→http) | Should redirect to HTTPS |
+| 7.6 | Try opening https://anonyhealth.alpfr.com with HTTP (replace https→http) | Should redirect to HTTPS |
 
 ### Things to verify
-- [ ] All network requests go to known domains (anonyhealth.opssightai.com, supabase.co, anthropic.com via your backend)
+- [ ] All network requests go to known domains (anonyhealth.alpfr.com, supabase.co, anthropic.com via your backend)
 - [ ] No personal data leaks to third-party domains (no requests to Google Analytics, Facebook, etc.)
 - [ ] HTTPS is enforced
+
+---
+
+## Scenario 8: Provider Appointment Workflow (10 min)
+
+This tests the full appointment request cycle from a patient submitting a request
+to a provider confirming or counter-proposing a time. **You need a provider account
+and a patient account** (use two different browsers or incognito windows).
+
+### Steps
+
+| # | Action | Expected Result |
+|---|---|---|
+| 8.1 | Sign in as a **patient** with an active provider connection | Patient dashboard shows provider banner with "Book appointment →" |
+| 8.2 | Click "Book appointment →" | Opens the appointment request form |
+| 8.3 | Pick a preferred date (tomorrow or later), select a time window, set urgency, enter a reason | All fields accept input |
+| 8.4 | Click "Send request" | Button shows "Sending…" then clears the form |
+| 8.5 | Scroll down under the form | Your new request appears in "Your requests" with status **Awaiting provider** |
+| 8.6 | **Switch to the provider browser** — go to provider dashboard → "Appointment requests" | The new patient request appears in the list |
+| 8.7 | Click "Confirm" on the request | Status changes to **Confirmed** |
+| 8.8 | **Switch back to patient browser** — refresh the appointment screen | Request now shows **Confirmed** in green |
+| 8.9 | Back in the **provider browser**, find a different request and click "Propose new time" | A date/time input appears |
+| 8.10 | Enter a new proposed time and submit | Status changes to **New time proposed** |
+| 8.11 | In the **patient browser**, check the request | Shows **New time proposed** in blue with the provider's note |
+| 8.12 | Patient clicks "Cancel request" on a pending request | Status changes to **Cancelled** |
+
+### Things to verify
+- [ ] Appointment requests appear immediately for the provider without a page refresh
+- [ ] Status labels and colors are correct (amber=awaiting, green=confirmed, blue=counter-proposed, red=declined)
+- [ ] Provider note is visible to the patient on counter-proposals
+- [ ] Cancelled requests cannot be re-opened
+- [ ] No errors appear in the browser console during any step
+
+---
+
+## Scenario 9: Provider Profile & Scheduling Link (5 min)
+
+Tests that the provider's public profile and booking URL are surfaced correctly
+to patients.
+
+### Steps
+
+| # | Action | Expected Result |
+|---|---|---|
+| 9.1 | Sign in as a **provider** → go to Settings → "Provider profile" | Profile form loads with any previously saved info |
+| 9.2 | Fill in: Display name, Credentials (e.g. MD), Specialty, a short Bio | All fields accept input |
+| 9.3 | In the "Scheduling link" field, enter your **root Calendly URL** (e.g. `calendly.com/your-name`) | A ⚠️ warning appears immediately below the field explaining you need to add the event name |
+| 9.4 | Update the URL to the **specific event** (e.g. `calendly.com/your-name/telehealth-appointment`) | Warning disappears |
+| 9.5 | Click "Test link in new tab" | A new tab opens directly on that specific Calendly event booking page |
+| 9.6 | Click "Save & close" | Shows "Saved HH:MM" confirmation for ~2 seconds, then returns to the previous screen |
+| 9.7 | **Switch to a patient browser** connected to this provider | Patient dashboard shows the provider banner with the correct name, credentials, and specialty |
+| 9.8 | Click "Book appointment →" on the patient dashboard | Opens the **specific Calendly event** (not the root profile page) |
+
+### Things to verify
+- [ ] Warning appears for root-level Calendly URLs (missing event slug)
+- [ ] Warning disappears once a proper event URL is entered
+- [ ] "Test link" opens the correct event in a new tab
+- [ ] "Saved HH:MM" confirmation is readable before the screen dismisses
+- [ ] Patient sees updated provider name, credentials, and specialty
+- [ ] Booking link opens the correct appointment type — **not** the root Calendly profile
 
 ---
 
@@ -242,7 +303,7 @@ When you find an issue, please copy this template into a new GitHub issue
 - Browser: [Chrome 120, Safari 17, etc.]
 - OS: [macOS Sonoma, Windows 11, iOS 17, Android 14, etc.]
 - Device: [Desktop, iPhone 15, etc.]
-- URL where it happened: https://anonyhealth.opssightai.com/...
+- URL where it happened: https://anonyhealth.alpfr.com/...
 
 **Screenshots / video:**
 [attach if you can]
@@ -266,6 +327,8 @@ After running through all scenarios, fill this out:
 | 5. Identity tier UI | ☐ | ☐ | |
 | 6. Mobile responsiveness | ☐ | ☐ | |
 | 7. Privacy + security | ☐ | ☐ | |
+| 8. Provider appointment workflow | ☐ | ☐ | |
+| 9. Provider profile & scheduling link | ☐ | ☐ | |
 
 **Overall verdict on MVP readiness:**
 

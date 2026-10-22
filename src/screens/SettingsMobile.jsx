@@ -32,10 +32,27 @@ const SettingsRow = ({ icon, label, desc, right, border = true, t }) => (
 export const SettingsMobile = ({ theme, onBack, session, onNavigate }) => {
   const t = T[theme];
   const { isDoctor } = useTenant();
-  const [notifs, setNotifs] = useState(true);
-  const [updates, setUpdates] = useState(false);
-  const [anon, setAnon] = useState(true);
   const [billingBusy, setBillingBusy] = useState(false);
+
+  // ── Persisted toggle helpers ──────────────────────────────
+  // Read a boolean from localStorage with a fallback default.
+  const readPref = (key, defaultVal) => {
+    try {
+      const v = localStorage.getItem(`anonyhealth.pref.${key}`);
+      return v === null ? defaultVal : v === "true";
+    } catch { return defaultVal; }
+  };
+  const writePref = (key, val) => {
+    try { localStorage.setItem(`anonyhealth.pref.${key}`, String(val)); } catch { /* storage unavailable */ }
+  };
+
+  const [notifs, setNotifs] = useState(() => readPref("notifs", true));
+  const [updates, setUpdates] = useState(() => readPref("updates", false));
+  const [anon, setAnon] = useState(() => readPref("anon", true));
+
+  const toggleNotifs = () => { const next = !notifs; setNotifs(next); writePref("notifs", next); };
+  const toggleUpdates = () => { const next = !updates; setUpdates(next); writePref("updates", next); };
+  const toggleAnon = () => { const next = !anon; setAnon(next); writePref("anon", next); };
 
   const handleSignOut = async () => {
     await logAuditEvent("auth.sign_out", "User signed out");
@@ -158,8 +175,8 @@ export const SettingsMobile = ({ theme, onBack, session, onNavigate }) => {
           border: `1px solid ${t.border}`, boxShadow: t.shadow, marginBottom: 20,
         }}>
           <h3 style={{ fontSize: 12, fontWeight: 700, color: t.textMut, fontFamily: "'Outfit', sans-serif", textTransform: "uppercase", letterSpacing: "0.06em", padding: "14px 0 4px" }}>Notifications</h3>
-          <SettingsRow t={t} icon={Icons.bell(t.accent)} label="Appointment reminders" right={<Toggle active={notifs} theme={theme} onChange={() => setNotifs(!notifs)} />} />
-          <SettingsRow t={t} icon={Icons.bell(t.textMut)} label="Updates and news" right={<Toggle active={updates} theme={theme} onChange={() => setUpdates(!updates)} />} border={false} />
+          <SettingsRow t={t} icon={Icons.bell(t.accent)} label="Appointment reminders" right={<Toggle active={notifs} theme={theme} onChange={toggleNotifs} />} />
+          <SettingsRow t={t} icon={Icons.bell(t.textMut)} label="Updates and news" right={<Toggle active={updates} theme={theme} onChange={toggleUpdates} />} border={false} />
         </div>
 
         {/* Privacy */}
@@ -168,7 +185,9 @@ export const SettingsMobile = ({ theme, onBack, session, onNavigate }) => {
           border: `1px solid ${t.border}`, boxShadow: t.shadow, marginBottom: 20,
         }}>
           <h3 style={{ fontSize: 12, fontWeight: 700, color: t.textMut, fontFamily: "'Outfit', sans-serif", textTransform: "uppercase", letterSpacing: "0.06em", padding: "14px 0 4px" }}>Privacy</h3>
-          <SettingsRow t={t} icon={Icons.eyeOff(t.accent)} label="Anonymize patient activity" desc="Your identity will be reserved from matching providers" right={<Toggle active={anon} theme={theme} onChange={() => setAnon(!anon)} />} />
+          <SettingsRow t={t} icon={Icons.eyeOff(t.accent)} label="Anonymize patient activity"
+            desc={<span>Your identity will be reserved from matching providers{" "}<span style={{ fontSize: 10, fontWeight: 700, color: t.textMut, background: t.chipBg, padding: "1px 5px", borderRadius: 4, letterSpacing: "0.04em" }}>COMING SOON</span></span>}
+            right={<Toggle active={anon} theme={theme} onChange={toggleAnon} />} />
           <SettingsRow t={t} icon={Icons.database(t.accent)} label="Data Management" right={Icons.chevRight(t.textMut)} border={false} />
         </div>
 

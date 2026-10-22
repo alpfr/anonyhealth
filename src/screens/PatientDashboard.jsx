@@ -57,6 +57,14 @@ export const PatientDashboard = ({ theme, onNavigate }) => {
     }
   };
 
+  const handleOpenChat = () => {
+    // Pass any typed text to the chat screen so mobile users who don't trigger
+    // the Enter keydown event don't lose what they've typed.
+    const msg = activityInput.trim();
+    onNavigate("chat", msg || undefined);
+    if (msg) setActivityInput("");
+  };
+
   const severityColor = (sev) => {
     if (sev == null) return t.textMut;
     if (sev >= 7) return "#dc2626";
@@ -205,7 +213,7 @@ export const PatientDashboard = ({ theme, onNavigate }) => {
                 fontSize: 14, color: t.text, fontFamily: "'Outfit', sans-serif",
               }}
             />
-            <button onClick={() => onNavigate("chat")} style={{
+            <button onClick={handleOpenChat} style={{
               border: "none", background: "none", cursor: "pointer",
               color: t.accent, fontSize: 12, fontWeight: 700, fontFamily: "'Outfit', sans-serif",
             }}>OPEN</button>
