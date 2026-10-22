@@ -16,14 +16,15 @@ AnonyHealth connects patients with healthcare providers while maintaining strict
 - **Confidential Registration** — Identity verification fields (name, DOB, address) for Maryland telehealth compliance. PII stored in Supabase auth metadata with consent timestamp.
 - **Secure Authentication** — Supabase Auth with email/password sign up and sign in. Prototype access gated by password.
 - **Responsive UI** — Split view (desktop + mobile phone frame), desktop-only, and mobile-only modes. Dark/light theme toggle.
-- **Interactive Clinical Workflow Simulator** — Live browser-based simulation demonstrating patient intake, sub-millisecond Jev reflex screening, multi-agent AI triage, SOAP note drafting, CPT billing, and HL7 FHIR R4 export in both dark and light modes. Try it live at [anonyhealth-cg4uqokewq-uc.a.run.app/simulation.html](https://anonyhealth-cg4uqokewq-uc.a.run.app/simulation.html). Full guide: [docs/SIMULATION_GUIDE.md](docs/SIMULATION_GUIDE.md).
+- **Interactive Clinical Workflow Simulator** — Live browser-based simulation demonstrating patient intake, sub-millisecond Jev reflex screening, multi-agent AI triage, SOAP note drafting, CPT billing, and HL7 FHIR R4 export in both dark and light modes. Try it live at [anonyhealth.alpfr.com/simulation.html](https://anonyhealth.alpfr.com/simulation.html) (Direct Cloud Run: [anonyhealth-cg4uqokewq-uc.a.run.app/simulation.html](https://anonyhealth-cg4uqokewq-uc.a.run.app/simulation.html)). Full guide: [docs/SIMULATION_GUIDE.md](docs/SIMULATION_GUIDE.md).
 - **Jev System 1 Clinical Safety Engine** — Deterministic edge reflex engine (<1ms, $0.00 token cost) intercepting emergency red flags (STEMI, stroke, anaphylaxis, crisis), dual-vault zero-knowledge PII/clinical data separation, and post-triage safety arbiter. See [docs/JEV_HEALTHCARE_ARCHITECTURE.md](docs/JEV_HEALTHCARE_ARCHITECTURE.md).
 - **Privacy Controls** — Settings for anonymizing patient activity, notification preferences, and data management.
 
 ## 🎮 Interactive Simulation
 
 Experience the interactive clinical workflow simulator without needing backend credentials:
-- **Live Cloud Run Simulation:** [https://anonyhealth-cg4uqokewq-uc.a.run.app/simulation.html](https://anonyhealth-cg4uqokewq-uc.a.run.app/simulation.html)
+- **Primary Domain:** [https://anonyhealth.alpfr.com/simulation.html](https://anonyhealth.alpfr.com/simulation.html)
+- **Direct Cloud Run:** [https://anonyhealth-cg4uqokewq-uc.a.run.app/simulation.html](https://anonyhealth-cg4uqokewq-uc.a.run.app/simulation.html)
 - **Comprehensive Walkthrough Guide:** [docs/SIMULATION_GUIDE.md](docs/SIMULATION_GUIDE.md)
 
 <p align="center">
@@ -54,11 +55,31 @@ Experience the interactive clinical workflow simulator without needing backend c
 </p>
 <p align="center"><i>See <a href="docs/APPLICATION_FLOW_GUIDE.md">docs/APPLICATION_FLOW_GUIDE.md</a> for the full step-by-step usage specification, sequence diagrams, and EHR integration details.</i></p>
 
-### 5. First-Time User & Provider Training Navigation Guide
+### 5. Patient Journey Workflow
+<p align="center">
+  <img src="docs/images/patient-workflow.jpg" alt="AnonyHealth Patient Journey Workflow Diagram" width="80%" />
+</p>
+<p align="center"><i>See <a href="docs/PATIENT-USER-GUIDE.md">docs/PATIENT-USER-GUIDE.md</a> for the complete patient guide.</i></p>
+
+### 6. Provider Journey Workflow
+<p align="center">
+  <img src="docs/images/provider-workflow.jpg" alt="AnonyHealth Provider Journey Workflow Diagram" width="80%" />
+</p>
+<p align="center"><i>See <a href="docs/PROVIDER-USER-GUIDE.md">docs/PROVIDER-USER-GUIDE.md</a> for the complete provider guide.</i></p>
+
+### 7. First-Time User & Provider Training Navigation Guide
 <p align="center">
   <img src="docs/images/anonyhealth_first_time_training_guide.jpg" alt="AnonyHealth First-Time User & Provider Training Navigation Guide" width="100%" />
 </p>
 <p align="center"><i>See <a href="docs/FIRST_TIME_NAVIGATION_TRAINING.md">docs/FIRST_TIME_NAVIGATION_TRAINING.md</a> for the complete step-by-step training manual for both patients and healthcare providers.</i></p>
+
+## 📖 User Guides
+
+| Guide | Audience | Link |
+|---|---|---|
+| Patient User Guide | Patients | [docs/PATIENT-USER-GUIDE.md](docs/PATIENT-USER-GUIDE.md) |
+| Provider User Guide | Healthcare providers | [docs/PROVIDER-USER-GUIDE.md](docs/PROVIDER-USER-GUIDE.md) |
+| Tester Guide | QA / Test participants | [docs/TESTER-GUIDE.md](docs/TESTER-GUIDE.md) |
 
 ## 📋 Market Readiness & Production Recommendations
 
@@ -156,20 +177,38 @@ The deployment runs 2 replicas with resource limits (256Mi memory, 500m CPU). Th
 
 ```
 src/
-  App.jsx           # All screens and components (monolithic)
-  main.jsx          # React entry point
-  supabaseClient.js # Supabase client initialization
-  index.css         # Global styles
-  App.css           # Component styles (mostly overridden by inline)
+  App.jsx                       # Root router — maps routes to screen components
+  main.jsx                      # React entry point
+  supabaseClient.js             # Supabase client initialization
+  index.css                     # Global styles
+  screens/                      # All full-page screen components
+    LandingPage.jsx             # Public marketing landing
+    PatientDashboard.jsx        # Patient home — AI triage, booking, provider banner
+    AIChatMobile.jsx            # AI triage chat with Jev safety intercept
+    BookAppointmentMobile.jsx   # Patient appointment request form
+    DoctorDashboardMobile.jsx   # Provider home — invite, patients, requests
+    AppointmentRequestsMobile.jsx # Provider appointment management
+    ProviderProfileMobile.jsx   # Provider profile & scheduling link setup
+    PatientDetailMobile.jsx     # Provider view of patient detail & history
+    MessagesMobile.jsx          # Real-time 1:1 messaging
+    SettingsMobile.jsx          # Account, notifications, privacy, billing
+    HistoryMobile.jsx           # Patient triage session history
+  components/                   # Shared UI components
+  context/                      # React context providers (Auth, Tenant)
+  services/                     # Supabase query functions
+  utils/                        # Auth helpers, audit logging, validation
+  constants/                    # Theme tokens
 supabase/
-  functions/
-    aichat/
-      index.ts      # Edge function for AI triage (Anthropic API)
-supabase_schema.sql # Database schema and seed data
-Dockerfile          # Multi-stage Docker build
-nginx.conf          # Nginx config with SPA fallback
-deployment.yaml     # Kubernetes deployment spec
-service.yaml        # Kubernetes LoadBalancer service
+  functions/                    # Edge functions (AI chat, Stripe, email)
+supabase_schema.sql             # Database schema and RLS policies
+Dockerfile                      # Multi-stage Docker build
+nginx.conf                      # Nginx config with SPA fallback and CSP
+cloudbuild.yaml                 # GCP Cloud Build pipeline → Cloud Run deploy
+docs/
+  PATIENT-USER-GUIDE.md         # End-user guide for patients
+  PROVIDER-USER-GUIDE.md        # End-user guide for providers
+  TESTER-GUIDE.md               # QA tester scenarios and bug report template
+  images/                       # Screen mockups and workflow diagrams
 ```
 
 ## License

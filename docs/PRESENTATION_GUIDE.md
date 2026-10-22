@@ -1,7 +1,7 @@
 # How AnonyHealth Works: Presentation & Demo Guide
 
 > **Audience:** Clinical Stakeholders, Practice Administrators, Investors, and Product Demonstrators  
-> **Interactive Cloud Endpoint:** [https://anonyhealth-cg4uqokewq-uc.a.run.app](https://anonyhealth-cg4uqokewq-uc.a.run.app)  
+> **Interactive Cloud Endpoint:** [https://anonyhealth.alpfr.com](https://anonyhealth.alpfr.com) *(Direct Cloud Run: [https://anonyhealth-cg4uqokewq-uc.a.run.app](https://anonyhealth-cg4uqokewq-uc.a.run.app))*  
 > **Repository:** [https://github.com/alpfr/anonyhealth.git](https://github.com/alpfr/anonyhealth.git)
 
 ---
@@ -10,6 +10,16 @@
 
 <p align="center">
   <img src="images/anonyhealth_presentation_flow.jpg" alt="How AnonyHealth Works: End-to-End User Journey & Presentation Guide" width="100%" />
+</p>
+
+### Patient Journey Workflow
+<p align="center">
+  <img src="images/patient-workflow.jpg" alt="Patient Journey Workflow" width="80%" />
+</p>
+
+### Provider Journey Workflow
+<p align="center">
+  <img src="images/provider-workflow.jpg" alt="Provider Journey Workflow" width="80%" />
 </p>
 
 ---
@@ -54,15 +64,23 @@
 
 When demonstrating the platform to stakeholders:
 
-1. **Show Patient Intake:**
-   - Navigate to [https://anonyhealth-cg4uqokewq-uc.a.run.app](https://anonyhealth-cg4uqokewq-uc.a.run.app).
+1. **Show Patient Intake (anonymous — no login):**
+   - Navigate to [https://anonyhealth.alpfr.com](https://anonyhealth.alpfr.com) (or [https://anonyhealth-cg4uqokewq-uc.a.run.app](https://anonyhealth-cg4uqokewq-uc.a.run.app)).
+   - Start typing immediately — the platform creates an anonymous session automatically.
    - Enter symptom: *"Persistent dry cough and mild fever 99.8F for 2 days"*.
    - Show natural conversational response, severity rating (4/10), and home care plan.
+
 2. **Show Emergency Intercept:**
    - In a new message, type: *"I have crushing chest pain radiating to my left arm"*.
    - Point out the **0ms instantaneous intercept**: the red emergency card immediately halts AI chat and presents direct 911 / 988 call buttons.
-3. **Show Doctor Workflow & EHR Integration:**
-   - Open Doctor View / Patient Detail.
-   - Show the **JEV: MODERATE** badge.
-   - Click **"Preview"** to display the generated Clinical SOAP Note with CPT 99422 and ICD-10 `R05.9`.
-   - Click **"Download FHIR JSON"** to demonstrate hospital interoperability.
+
+3. **Show Provider Workflow:**
+   - Sign up as a provider at [https://anonyhealth.alpfr.com](https://anonyhealth.alpfr.com).
+   - From the provider dashboard, show **Generate invite link** — a cryptographic single-use link valid for 7 days.
+   - Open the invite link in incognito → sign up as a patient → submit an appointment request.
+   - Switch back to provider view → show **Appointment requests** → confirm the appointment.
+   - Open the patient detail → show triage history with severity scores.
+
+4. **Show Direct Messaging:**
+   - Send a message from the provider to the patient.
+   - Switch to patient view and show the reply arrives in real time.
