@@ -7,20 +7,20 @@ import { parseRoute } from "../../src/utils/parseRoute.js";
 // Ensures all SPA routes are correctly parsed from the URL.
 // ═══════════════════════════════════════════════════════════
 
+// Provide a minimal `window` shim in Node.js so parseRoute can read
+// window.location.pathname without a full browser environment.
+if (typeof globalThis.window === "undefined") {
+  globalThis.window = { location: { pathname: "/" } };
+}
+
 // Helper: set window.location.pathname for tests.
 function withPath(path, fn) {
   const original = window.location.pathname;
-  Object.defineProperty(window, "location", {
-    writable: true,
-    value: { ...window.location, pathname: path },
-  });
+  window.location = { ...window.location, pathname: path };
   try {
     fn();
   } finally {
-    Object.defineProperty(window, "location", {
-      writable: true,
-      value: { ...window.location, pathname: original },
-    });
+    window.location = { ...window.location, pathname: original };
   }
 }
 

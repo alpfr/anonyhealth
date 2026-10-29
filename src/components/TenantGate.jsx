@@ -35,7 +35,7 @@ const DoctorApp = lazy(() =>
  */
 export const TenantGate = ({ children, route }) => {
   const { theme } = useTheme();
-  const { isAnonymous } = useAuth();
+  const { isAnonymous, session } = useAuth();
   const {
     loading,
     membership,
@@ -85,8 +85,14 @@ export const TenantGate = ({ children, route }) => {
     return children;
   }
 
-  // Doctor path: no tenant yet → onboarding
+  // No tenant membership: route based on the user's stated role.
+  // Providers/doctors → onboarding, patients → PatientApp (children).
   if (!membership) {
+    const role = session?.user?.user_metadata?.role;
+    if (role === "patient" || (!role && !isDoctor)) {
+      // Authenticated patients without a tenant still use PatientApp.
+      return children;
+    }
     return (
       <Suspense fallback={<ScreenLoader theme={theme} />}>
         <DoctorOnboardingMobile theme={theme} />

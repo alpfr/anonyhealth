@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { supabase } from "../supabaseClient";
 import { T, Icons } from "../constants/theme";
 import { MobileNav } from "../components/MobileNav";
@@ -92,6 +92,77 @@ function cleanForDisplay(text) {
   return cleaned;
 }
 
+/**
+ * Memoized chat bubble — prevents re-rendering of already-complete messages
+ * while new content streams into the latest bot message.
+ */
+const ChatBubble = memo(function ChatBubble({ msg, showAgentLabel, t, isDark, agentLabel, agentColor }) {
+  const isBot = msg.role === "bot";
+  return (
+    <div style={{
+      display: "flex",
+      flexDirection: "column",
+      alignItems: isBot ? "flex-start" : "flex-end",
+      animation: "chatIn 0.35s ease-out",
+    }}>
+      {showAgentLabel && (
+        <div style={{
+          fontSize: 11, fontWeight: 600, color: agentColor,
+          fontFamily: "'Outfit', sans-serif", marginBottom: 4,
+          paddingLeft: 4, display: "flex", alignItems: "center", gap: 4,
+        }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: "50%",
+            background: agentColor, display: "inline-block",
+          }} />
+          {agentLabel}
+        </div>
+      )}
+      <div style={{
+        maxWidth: "82%", padding: "11px 15px",
+        borderRadius: msg.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+        background: msg.isEmergency
+          ? (isDark ? "rgba(239, 68, 68, 0.15)" : "#FEF2F2")
+          : (msg.role === "user" ? t.accent : t.bgCard),
+        color: msg.isEmergency
+          ? (isDark ? "#FECACA" : "#991B1B")
+          : (msg.role === "user" ? "#fff" : t.text),
+        fontSize: 14, lineHeight: 1.55, fontFamily: "'Outfit', sans-serif",
+        border: msg.isEmergency
+          ? `2px solid ${t.danger}`
+          : (msg.role === "user" ? "none" : `1px solid ${t.border}`),
+        boxShadow: msg.role === "user"
+          ? (isDark ? `0 2px 12px ${t.accent}30` : `0 2px 8px ${t.accent}15`)
+          : (msg.isEmergency ? "0 4px 16px rgba(220, 38, 38, 0.2)" : "none"),
+        whiteSpace: "pre-wrap",
+      }}>
+        {msg.text}
+
+        {msg.isEmergency && (
+          <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <a href="tel:911" style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "7px 14px", background: "#DC2626", color: "#fff",
+              borderRadius: 10, fontSize: 12.5, fontWeight: 700,
+              textDecoration: "none", boxShadow: "0 2px 8px rgba(220, 38, 38, 0.3)",
+            }}>
+              <span>📞</span> Call 911 Now
+            </a>
+            <a href="tel:988" style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "7px 14px", background: isDark ? "#2A3352" : "#F3F4F6",
+              color: t.text, borderRadius: 10, fontSize: 12.5, fontWeight: 600,
+              textDecoration: "none", border: `1px solid ${t.border}`,
+            }}>
+              <span>💬</span> Dial 988
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
 export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
   const t = T[theme];
   const isDark = theme === "dark";
@@ -110,9 +181,10 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
     return () => { cancelled = true; };
   }, [tenant?.id]);
 
-  // Each message has: { role: "user" | "bot", text, agent?: "intake" | "triage" }
+  // Each message has: { id, role: "user" | "bot", text, agent?: "intake" | "triage" }
+  const nextId = () => ++msgIdRef.current;
   const [msgs, setMsgs] = useState(
-    initialMsg ? [{ role: "user", text: initialMsg }] : []
+    initialMsg ? [{ id: 0, role: "user", text: initialMsg }] : []
   );
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
@@ -126,6 +198,7 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
   const chatRef = useRef(null);
   const abortRef = useRef(null);
   const msgIdRef = useRef(0); // Stable key counter for chat messages
+  const lastSentRef = useRef(0); // Rate-limit: timestamp of last send
 
   useEffect(() => {
     if (initialMsg && msgs.length === 1 && msgs[0].role === "user") {
@@ -175,7 +248,7 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
 
       setTyping(false);
       // Push an empty triage message that we'll fill via streaming.
-      setMsgs((prev) => [...prev, { role: "bot", text: "", agent: "triage" }]);
+      setMsgs((prev) => [...prev, { id: nextId(), role: "bot", text: "", agent: "triage" }]);
 
       const fullText = await streamSseResponse(res, (assembled) => {
         const display = cleanForDisplay(assembled);
@@ -214,6 +287,7 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
       setMsgs((prev) => [
         ...prev,
         {
+          id: nextId(),
           role: "bot",
           agent: "triage",
           text: err.message || "Couldn't run triage assessment. Please try again.",
@@ -224,6 +298,11 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
 
   const handleSend = useCallback(async (textOverride = null, skipUserAdd = false) => {
     if (triageDone) return; // Conversation has ended.
+
+    // Rate-limit: ignore rapid-fire sends (2s cooldown)
+    const now = Date.now();
+    if (!skipUserAdd && now - lastSentRef.current < 2000) return;
+    lastSentRef.current = now;
 
     const raw = textOverride || input;
     const textToSend = sanitizeChatMessage(raw);
@@ -237,8 +316,9 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
       if (!skipUserAdd) {
         setMsgs((prev) => [
           ...prev,
-          { role: "user", text: textToSend },
+          { id: nextId(), role: "user", text: textToSend },
           {
+            id: nextId(),
             role: "bot",
             agent: "triage",
             isEmergency: true,
@@ -250,6 +330,7 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
         setMsgs((prev) => [
           ...prev,
           {
+            id: nextId(),
             role: "bot",
             agent: "triage",
             isEmergency: true,
@@ -267,14 +348,14 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
     if (piiCleanedText.length > 2000) {
       setMsgs((prev) => [
         ...prev,
-        { role: "bot", agent: "intake", text: "Please keep your message under 2000 characters." },
+        { id: nextId(), role: "bot", agent: "intake", text: "Please keep your message under 2000 characters." },
       ]);
       return;
     }
 
     // Build the message list as it'll appear AFTER this user turn is added,
     // because both UI state and Intake API need to see this turn.
-    const newUserMsg = { role: "user", text: piiCleanedText };
+    const newUserMsg = { id: nextId(), role: "user", text: piiCleanedText };
     const baseMsgs = skipUserAdd ? msgs : [...msgs, newUserMsg];
 
     if (!skipUserAdd) {
@@ -325,7 +406,8 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
       }
 
       setTyping(false);
-      setMsgs((prev) => [...prev, { role: "bot", text: "", agent: "intake" }]);
+      const botMsgId = nextId();
+      setMsgs((prev) => [...prev, { id: botMsgId, role: "bot", text: "", agent: "intake" }]);
 
       const fullText = await streamSseResponse(res, (assembled) => {
         const display = cleanForDisplay(assembled);
@@ -358,6 +440,7 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
       setMsgs((prev) => [
         ...prev,
         {
+          id: nextId(),
           role: "bot",
           agent: "intake",
           text: err.message || "I'm having trouble connecting. Please try again in a moment.",
@@ -414,104 +497,20 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
 
         {msgs.map((msg, i) => {
           const isBot = msg.role === "bot";
-          // Show the agent label above each bot message, but suppress
-          // consecutive duplicate labels for a cleaner thread.
           const prevAgent =
             i > 0 && msgs[i - 1].role === "bot" ? msgs[i - 1].agent : null;
-          const showAgentLabel = isBot && msg.agent && msg.agent !== prevAgent;
+          const showLabel = isBot && msg.agent && msg.agent !== prevAgent;
 
           return (
-            <div key={i} style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: isBot ? "flex-start" : "flex-end",
-              animation: "chatIn 0.35s ease-out",
-            }}>
-              {showAgentLabel && (
-                <div style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: agentColor(msg.agent),
-                  fontFamily: "'Outfit', sans-serif",
-                  marginBottom: 4,
-                  paddingLeft: 4,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                }}>
-                  <span style={{
-                    width: 6, height: 6, borderRadius: "50%",
-                    background: agentColor(msg.agent),
-                    display: "inline-block",
-                  }} />
-                  {agentLabel(msg.agent)}
-                </div>
-              )}
-              <div style={{
-                maxWidth: "82%",
-                padding: "11px 15px",
-                borderRadius: msg.role === "user"
-                  ? "16px 16px 4px 16px"
-                  : "16px 16px 16px 4px",
-                background: msg.isEmergency
-                  ? (isDark ? "rgba(239, 68, 68, 0.15)" : "#FEF2F2")
-                  : (msg.role === "user" ? t.accent : t.bgCard),
-                color: msg.isEmergency
-                  ? (isDark ? "#FECACA" : "#991B1B")
-                  : (msg.role === "user" ? "#fff" : t.text),
-                fontSize: 14, lineHeight: 1.55, fontFamily: "'Outfit', sans-serif",
-                border: msg.isEmergency
-                  ? `2px solid ${t.danger}`
-                  : (msg.role === "user" ? "none" : `1px solid ${t.border}`),
-                boxShadow: msg.role === "user"
-                  ? (isDark ? `0 2px 12px ${t.accent}30` : `0 2px 8px ${t.accent}15`)
-                  : (msg.isEmergency ? "0 4px 16px rgba(220, 38, 38, 0.2)" : "none"),
-                whiteSpace: "pre-wrap",
-              }}>
-                {msg.text}
-
-                {msg.isEmergency && (
-                  <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <a
-                      href="tel:911"
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                        padding: "7px 14px",
-                        background: "#DC2626",
-                        color: "#fff",
-                        borderRadius: 10,
-                        fontSize: 12.5,
-                        fontWeight: 700,
-                        textDecoration: "none",
-                        boxShadow: "0 2px 8px rgba(220, 38, 38, 0.3)",
-                      }}
-                    >
-                      <span>📞</span> Call 911 Now
-                    </a>
-                    <a
-                      href="tel:988"
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                        padding: "7px 14px",
-                        background: isDark ? "#2A3352" : "#F3F4F6",
-                        color: t.text,
-                        borderRadius: 10,
-                        fontSize: 12.5,
-                        fontWeight: 600,
-                        textDecoration: "none",
-                        border: `1px solid ${t.border}`,
-                      }}
-                    >
-                      <span>💬</span> Dial 988
-                    </a>
-                  </div>
-                )}
-              </div>
-            </div>
+            <ChatBubble
+              key={msg.id}
+              msg={msg}
+              showAgentLabel={showLabel}
+              t={t}
+              isDark={isDark}
+              agentLabel={agentLabel(msg.agent)}
+              agentColor={agentColor(msg.agent)}
+            />
           );
         })}
 
