@@ -1,3 +1,4 @@
+import { useEffect, useRef, useCallback } from "react";
 import { T } from "../constants/theme";
 
 /**
@@ -7,6 +8,61 @@ import { T } from "../constants/theme";
  * Jev System 1 Reflex Engine. Prevents delay during life-threatening presentations.
  */
 export const EmergencyInterceptModal = ({ isOpen, onClose, interceptData, theme = "light" }) => {
+  const modalRef = useRef(null);
+  const previousFocusRef = useRef(null);
+
+  // Focus trap: capture focus when modal opens, restore when it closes.
+  useEffect(() => {
+    if (!isOpen) return;
+    previousFocusRef.current = document.activeElement;
+
+    // Focus the first interactive element after render.
+    const timer = setTimeout(() => {
+      const focusable = modalRef.current?.querySelectorAll(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable?.length) focusable[0].focus();
+    }, 50);
+
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+
+      const focusable = modalRef.current?.querySelectorAll(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (!focusable?.length) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("keydown", handleKeyDown);
+      // Restore focus to previously focused element.
+      if (previousFocusRef.current?.focus) {
+        previousFocusRef.current.focus();
+      }
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen || !interceptData) return null;
   const t = T[theme] || T.light;
   const isDark = theme === "dark";
@@ -27,6 +83,10 @@ export const EmergencyInterceptModal = ({ isOpen, onClose, interceptData, theme 
       }}
     >
       <div
+        ref={modalRef}
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={interceptData.title || "Emergency clinical safety intercept"}
         style={{
           width: "100%",
           maxWidth: "460px",

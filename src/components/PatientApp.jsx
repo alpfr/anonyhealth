@@ -197,7 +197,6 @@ export const PatientApp = () => {
       }}
     >
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { overflow-x: hidden; background: ${t.bg}; }
         input::placeholder { color: ${t.textMut}; }

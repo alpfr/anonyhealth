@@ -85,6 +85,7 @@ create policy "Users can update own profile" on patient_profiles for update usin
 create table health_logs (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references auth.users not null,
+  tenant_id uuid references tenants(id),
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   symptom text,
   severity int, -- 1-10
@@ -112,9 +113,13 @@ create table audit_logs (
     'auth.sign_in',
     'auth.sign_up',
     'auth.sign_out',
+    'auth.anon_sign_in',
+    'auth.upgrade_anon',
     'profile.update',
     'health_log.create',
     'settings.change',
+    'message.read',
+    'message.send',
     'system.signup_trigger'
   )),
   detail text,
@@ -158,11 +163,136 @@ create policy "Public providers are viewable by everyone"
   using ( true );
 
 -- ═══════════════════════════════════════════════════════════
+-- 5. MULTI-TENANCY TABLES
+-- ═══════════════════════════════════════════════════════════
+
+-- Tenants: each provider practice is a tenant.
+create table tenants (
+  id uuid default gen_random_uuid() primary key,
+  name text not null,
+  deleted_at timestamp with time zone,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table tenants enable row level security;
+create policy "Members can view own tenant" on tenants for select
+  using (id in (select tenant_id from user_tenants where user_id = auth.uid()));
+
+-- User ↔ Tenant membership (role: 'doctor' | 'patient').
+create table user_tenants (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users not null,
+  tenant_id uuid references tenants(id) not null,
+  role text not null check (role in ('doctor', 'patient')),
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique (user_id, tenant_id)
+);
+
+alter table user_tenants enable row level security;
+create policy "Users can view own memberships" on user_tenants for select
+  using (auth.uid() = user_id);
+-- Doctors can view all memberships in their tenant (to list patients).
+create policy "Doctors can view tenant members" on user_tenants for select
+  using (tenant_id in (
+    select tenant_id from user_tenants where user_id = auth.uid() and role = 'doctor'
+  ));
+
+-- Subscriptions: Stripe subscription state per tenant.
+create table subscriptions (
+  id uuid default gen_random_uuid() primary key,
+  tenant_id uuid references tenants(id) not null unique,
+  stripe_customer_id text,
+  stripe_subscription_id text,
+  status text not null default 'trialing' check (status in ('active', 'trialing', 'past_due', 'canceled', 'incomplete')),
+  current_period_end timestamp with time zone,
+  cancel_at timestamp with time zone,
+  trial_end timestamp with time zone,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table subscriptions enable row level security;
+create policy "Tenant members can view subscription" on subscriptions for select
+  using (tenant_id in (select tenant_id from user_tenants where user_id = auth.uid()));
+
+-- Provider profiles: public-facing doctor profile linked to a tenant.
+create table provider_profiles (
+  id uuid default gen_random_uuid() primary key,
+  tenant_id uuid references tenants(id) not null unique,
+  display_name text,
+  specialty text,
+  bio text,
+  scheduling_url text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table provider_profiles enable row level security;
+-- Public read for provider directory.
+create policy "Provider profiles are public" on provider_profiles for select using (true);
+-- Doctors can update their own tenant's profile.
+create policy "Doctors can update own profile" on provider_profiles for update
+  using (tenant_id in (
+    select tenant_id from user_tenants where user_id = auth.uid() and role = 'doctor'
+  ));
+create policy "Doctors can insert own profile" on provider_profiles for insert
+  with check (tenant_id in (
+    select tenant_id from user_tenants where user_id = auth.uid() and role = 'doctor'
+  ));
+
+-- ═══════════════════════════════════════════════════════════
+-- 6. MESSAGES (Real-time 1:1 messaging)
+-- ═══════════════════════════════════════════════════════════
+
+create table messages (
+  id uuid default gen_random_uuid() primary key,
+  tenant_id uuid references tenants(id) not null,
+  patient_user_id uuid references auth.users not null,
+  sender_user_id uuid references auth.users not null,
+  body text not null check (char_length(body) <= 4000),
+  read_at timestamp with time zone,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table messages enable row level security;
+-- Patients can read/write messages in their own conversation.
+create policy "Patients can view own messages" on messages for select
+  using (auth.uid() = patient_user_id);
+create policy "Patients can send own messages" on messages for insert
+  with check (auth.uid() = sender_user_id and auth.uid() = patient_user_id);
+-- Doctors can read/write messages for patients in their tenant.
+create policy "Doctors can view tenant messages" on messages for select
+  using (tenant_id in (
+    select tenant_id from user_tenants where user_id = auth.uid() and role = 'doctor'
+  ));
+create policy "Doctors can send tenant messages" on messages for insert
+  with check (
+    auth.uid() = sender_user_id
+    and tenant_id in (
+      select tenant_id from user_tenants where user_id = auth.uid() and role = 'doctor'
+    )
+  );
+-- Both parties can mark messages as read.
+create policy "Conversation participants can update read_at" on messages for update
+  using (
+    auth.uid() = patient_user_id
+    or tenant_id in (
+      select tenant_id from user_tenants where user_id = auth.uid() and role = 'doctor'
+    )
+  );
+
+-- Enable Supabase Realtime for messages.
+alter publication supabase_realtime add table messages;
+
+-- ═══════════════════════════════════════════════════════════
 -- INDEXES for query performance
 -- ═══════════════════════════════════════════════════════════
 
 -- health_logs: frequently queried by user_id + created_at (history screen)
 create index idx_health_logs_user_created on health_logs (user_id, created_at desc);
+
+-- health_logs: tenant_id scoping
+create index idx_health_logs_tenant on health_logs (tenant_id);
 
 -- health_logs: severity filtering for analytics
 create index idx_health_logs_severity on health_logs (severity);
@@ -180,11 +310,25 @@ create index idx_audit_logs_event_type on audit_logs (event_type);
 -- providers: specialty filtering on provider directory
 create index idx_providers_specialty on providers (specialty);
 
+-- user_tenants: fast membership lookups
+create index idx_user_tenants_user on user_tenants (user_id);
+create index idx_user_tenants_tenant on user_tenants (tenant_id);
+
+-- messages: conversation lookup + ordering
+create index idx_messages_conversation on messages (tenant_id, patient_user_id, created_at);
+
+-- messages: unread detection
+create index idx_messages_unread on messages (patient_user_id, sender_user_id) where read_at is null;
+
+-- provider_profiles: tenant lookup
+create index idx_provider_profiles_tenant on provider_profiles (tenant_id);
+
 -- patient_profiles: no additional index needed (PK lookup only)
 
 -- ═══════════════════════════════════════════════════════════
 -- JEV CLINICAL GOVERNANCE MIGRATION (Idempotent for existing DBs)
 -- ═══════════════════════════════════════════════════════════
+-- alter table health_logs add column if not exists tenant_id uuid references tenants(id);
 -- alter table health_logs add column if not exists urgency text default 'routine' check (urgency in ('routine', 'urgent', 'emergency'));
 -- alter table health_logs add column if not exists decision_class text default 'AUTONOMOUS_HOME_CARE';
 -- alter table health_logs add column if not exists risk_band text default 'LOW' check (risk_band in ('LOW', 'MODERATE', 'HIGH', 'CRITICAL'));
@@ -192,4 +336,15 @@ create index idx_providers_specialty on providers (specialty);
 -- alter table health_logs add column if not exists arbiter_hash text;
 -- create index if not exists idx_health_logs_risk_band on health_logs (risk_band);
 -- create index if not exists idx_health_logs_decision_class on health_logs (decision_class);
+-- create index if not exists idx_health_logs_tenant on health_logs (tenant_id);
+
+-- ═══════════════════════════════════════════════════════════
+-- AUDIT LOG CHECK CONSTRAINT MIGRATION (Idempotent for existing DBs)
+-- ═══════════════════════════════════════════════════════════
+-- alter table audit_logs drop constraint if exists audit_logs_event_type_check;
+-- alter table audit_logs add constraint audit_logs_event_type_check check (event_type in (
+--   'auth.sign_in', 'auth.sign_up', 'auth.sign_out', 'auth.anon_sign_in',
+--   'auth.upgrade_anon', 'profile.update', 'health_log.create',
+--   'settings.change', 'message.read', 'message.send', 'system.signup_trigger'
+-- ));
 

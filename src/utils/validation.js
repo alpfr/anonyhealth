@@ -8,7 +8,7 @@ export const isValidEmail = (email) => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 };
 
-/** Validate password strength (min 6 chars for Firebase) */
+/** Validate password minimum length (min 6 chars for Supabase Auth) */
 export const isValidPassword = (password) => {
   if (!password || typeof password !== "string") return false;
   return password.length >= 6;

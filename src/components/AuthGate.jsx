@@ -782,7 +782,14 @@ export const AuthGate = ({
                 </div>
               </>
             ) : (
-              <>
+              <form
+                autoComplete="on"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (mode === "signin") handleSignIn();
+                  else handleSignUp();
+                }}
+              >
                 <input
                   type="email"
                   inputMode="email"
@@ -791,10 +798,6 @@ export const AuthGate = ({
                   placeholder="Email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  onKeyDown={(e) =>
-                    e.key === "Enter" &&
-                    (mode === "signin" ? handleSignIn() : handleSignUp())
-                  }
                   style={inputStyle}
                 />
                 <input
@@ -806,10 +809,6 @@ export const AuthGate = ({
                   placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={(e) =>
-                    e.key === "Enter" &&
-                    (mode === "signin" ? handleSignIn() : handleSignUp())
-                  }
                   style={{
                     ...inputStyle,
                     border: `1px solid ${error ? "#ef4444" : "#e2e8f0"}`,
@@ -844,7 +843,7 @@ export const AuthGate = ({
                 )}
 
                 <button
-                  onClick={mode === "signin" ? handleSignIn : handleSignUp}
+                  type="submit"
                   disabled={submitting}
                   style={primaryBtn(submitting)}
                 >
@@ -893,8 +892,9 @@ export const AuthGate = ({
                       paddingTop: 16,
                       borderTop: "1px solid #e2e8f0",
                       background: "none",
-                      border: "none",
-                      borderTopColor: "#e2e8f0",
+                      borderLeft: "none",
+                      borderRight: "none",
+                      borderBottom: "none",
                       color: "#0f172a",
                       cursor: "pointer",
                       fontSize: 13,
@@ -939,7 +939,7 @@ export const AuthGate = ({
                     What is AnonyHealth for providers? →
                   </a>
                 )}
-              </>
+              </form>
             )}
           </>
         )}

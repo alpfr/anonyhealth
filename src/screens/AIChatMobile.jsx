@@ -38,14 +38,17 @@ async function streamSseResponse(response, onDelta) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let fullText = "";
+  let buffer = "";
 
   while (true) {
     const { value, done } = await reader.read();
     if (done) break;
     if (!value) continue;
 
-    const chunk = decoder.decode(value, { stream: true });
-    const lines = chunk.split("\n");
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    // Keep the last (potentially incomplete) line in the buffer.
+    buffer = lines.pop() || "";
 
     for (const line of lines) {
       if (!line.startsWith("data: ") || line.trim() === "data: [DONE]") continue;
@@ -60,6 +63,20 @@ async function streamSseResponse(response, onDelta) {
       }
     }
   }
+
+  // Process any remaining buffered content.
+  if (buffer.startsWith("data: ") && buffer.trim() !== "data: [DONE]") {
+    try {
+      const data = JSON.parse(buffer.slice(6));
+      if (data.type === "content_block_delta" && data.delta?.text) {
+        fullText += data.delta.text;
+        onDelta(fullText);
+      }
+    } catch {
+      // Incomplete final chunk — skip.
+    }
+  }
+
   return fullText;
 }
 
@@ -108,6 +125,7 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
   const [showEmergencyModal, setShowEmergencyModal] = useState(false);
   const chatRef = useRef(null);
   const abortRef = useRef(null);
+  const msgIdRef = useRef(0); // Stable key counter for chat messages
 
   useEffect(() => {
     if (initialMsg && msgs.length === 1 && msgs[0].role === "user") {
@@ -370,7 +388,7 @@ export const AIChatMobile = ({ theme, initialMsg, onBack }) => {
           </div>
         }
       />
-      <div ref={chatRef} style={{ flex: 1, overflowY: "auto", padding: "16px 16px 8px", display: "flex", flexDirection: "column", gap: 10 }}>
+      <div ref={chatRef} aria-live="polite" aria-label="Chat messages" style={{ flex: 1, overflowY: "auto", padding: "16px 16px 8px", display: "flex", flexDirection: "column", gap: 10 }}>
         {/* AI header */}
         <div style={{ textAlign: "center", padding: "12px 0 16px", borderBottom: `1px solid ${t.border}`, marginBottom: 8 }}>
           <div style={{
