@@ -16,9 +16,14 @@ async function runDemo() {
     fs.mkdirSync(outDir, { recursive: true });
   }
 
-  const url = "https://anonyhealth-cg4uqokewq-uc.a.run.app";
+  const url = process.env.APP_URL || "https://anonyhealth.alpfr.com";
   console.log(`Navigating to ${url}...`);
-  await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
+  try {
+    await page.goto(url, { waitUntil: "networkidle", timeout: 15000 });
+  } catch {
+    console.log(`Fallback navigating to direct Cloud Run endpoint...`);
+    await page.goto("https://anonyhealth-cg4uqokewq-uc.a.run.app", { waitUntil: "networkidle", timeout: 30000 });
+  }
 
   page.on("console", (msg) => console.log("PAGE LOG:", msg.text()));
   page.on("pageerror", (err) => console.log("PAGE ERROR:", err.message));

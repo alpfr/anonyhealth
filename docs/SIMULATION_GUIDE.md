@@ -8,7 +8,8 @@ AnonyHealth includes a dedicated **Interactive Clinical Workflow Simulator** bui
 
 | Environment | Access Link | Description |
 | :--- | :--- | :--- |
-| **Live Cloud Run** | [anonyhealth-cg4uqokewq-uc.a.run.app/simulation.html](https://anonyhealth-cg4uqokewq-uc.a.run.app/simulation.html) | Live deployed web simulation on Google Cloud Run |
+| **Primary Domain** | [anonyhealth.alpfr.com/simulation.html](https://anonyhealth.alpfr.com/simulation.html) | Live branded web application |
+| **Direct Cloud Run** | [anonyhealth-cg4uqokewq-uc.a.run.app/simulation.html](https://anonyhealth-cg4uqokewq-uc.a.run.app/simulation.html) | Direct Google Cloud Run container endpoint |
 | **Local Dev** | `http://localhost:5173/simulation.html` | Served locally via Vite dev server |
 | **Local File** | `open dist/simulation.html` | Fully self-contained offline browser executable |
 

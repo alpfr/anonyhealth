@@ -2,7 +2,7 @@
 
 > **Target Audience:** First-Time Patients (Clients) & Onboarding Healthcare Providers (Physicians/Clinical Staff)  
 > **Platform:** AnonyHealth Confidential Telehealth Triage Platform  
-> **Interactive Cloud Sandbox:** [https://anonyhealth-cg4uqokewq-uc.a.run.app/simulation.html](https://anonyhealth-cg4uqokewq-uc.a.run.app/simulation.html)
+> **Interactive Cloud Sandbox:** [https://anonyhealth.alpfr.com/simulation.html](https://anonyhealth.alpfr.com/simulation.html) *(Direct Cloud Run: [https://anonyhealth-cg4uqokewq-uc.a.run.app/simulation.html](https://anonyhealth-cg4uqokewq-uc.a.run.app/simulation.html))*
 
 ---
 
@@ -156,7 +156,7 @@ This training guide walks first-time users through the platform step by step. Ch
 
 Want to practice these navigation steps without affecting real patient data?  
 👉 **Launch the Interactive Clinical Workflow Simulator:**  
-[https://anonyhealth-cg4uqokewq-uc.a.run.app/simulation.html](https://anonyhealth-cg4uqokewq-uc.a.run.app/simulation.html)
+[https://anonyhealth.alpfr.com/simulation.html](https://anonyhealth.alpfr.com/simulation.html) (Direct Cloud Run: [https://anonyhealth-cg4uqokewq-uc.a.run.app/simulation.html](https://anonyhealth-cg4uqokewq-uc.a.run.app/simulation.html))
 
 *Features live, interactive sandbox steps for:*
 1. Patient intake dialogue & multi-turn probing
